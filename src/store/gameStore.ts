@@ -9,9 +9,45 @@ import {
   applyEdgeChanges,
   addEdge,
 } from 'reactflow';
-import type { InputNodeData, OutputNodeData } from '../types';
+import type { InputNodeData, OutputNodeData, GameNodeData, NodeKind, Graph, FlowResult } from '../types';
+import { solveFlow } from '../solver/solveFlow';
 
-// ── Initial graph (Step 1 hardcoded level) ─────────────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────────
+
+function nodeTypeToKind(type: string | undefined): NodeKind {
+  switch (type) {
+    case 'inputNode':    return 'input';
+    case 'outputNode':   return 'output';
+    case 'splitterNode': return 'splitter';
+    case 'mergerNode':   return 'merger';
+    default:             return 'input';
+  }
+}
+
+function buildGraph(nodes: Node[], edges: Edge[]): Graph {
+  return {
+    nodes: nodes.map((n) => ({
+      id: n.id,
+      kind: nodeTypeToKind(n.type),
+      data: n.data as GameNodeData,
+    })),
+    edges: edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+    })),
+  };
+}
+
+/** Format a rate for display on an edge label. Removes trailing .00 noise. */
+function fmtRate(rate: number): string {
+  const rounded = Math.round(rate * 1000) / 1000;
+  return Number.isInteger(rounded) ? `${rounded}/min` : `${rounded}/min`;
+}
+
+// ── Initial graph (hardcoded Step 1/2 demo level) ─────────────────────────
 
 const initialNodes: Node[] = [
   {
@@ -49,15 +85,18 @@ const initialEdges: Edge[] = [
 interface GameState {
   nodes: Node[];
   edges: Edge[];
+  flowResult: FlowResult | null;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
+  validate: () => void;
   resetGraph: () => void;
 }
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   nodes: initialNodes,
   edges: initialEdges,
+  flowResult: null,
 
   onNodesChange: (changes) =>
     set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) })),
@@ -68,15 +107,40 @@ export const useGameStore = create<GameState>((set) => ({
   onConnect: (connection) =>
     set((state) => ({
       edges: addEdge(
-        {
-          ...connection,
-          animated: true,
-          style: { stroke: '#f59e0b', strokeWidth: 2 },
-        },
+        { ...connection, animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 } },
         state.edges,
       ),
     })),
 
+  validate: () => {
+    const { nodes, edges } = get();
+    const graph = buildGraph(nodes, edges);
+    const result = solveFlow(graph);
+
+    // Stamp actualRate onto every output node so OutputNode can colour itself.
+    const updatedNodes = nodes.map((node) => {
+      if (node.type !== 'outputNode') return node;
+      const or = result.outputResults[node.id];
+      if (!or) return node;
+      return { ...node, data: { ...node.data, actualRate: or.actual } };
+    });
+
+    // Stamp computed rate as a label on every edge.
+    const updatedEdges = edges.map((edge) => {
+      const rate = result.edgeRates[edge.id];
+      if (rate === undefined) return edge;
+      return {
+        ...edge,
+        label: fmtRate(rate),
+        labelStyle: { fill: '#f59e0b', fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+        labelBgStyle: { fill: '#0f172a', fillOpacity: 0.9 },
+        labelBgPadding: [4, 3] as [number, number],
+      };
+    });
+
+    set({ nodes: updatedNodes, edges: updatedEdges, flowResult: result });
+  },
+
   resetGraph: () =>
-    set({ nodes: initialNodes, edges: initialEdges }),
+    set({ nodes: initialNodes, edges: initialEdges, flowResult: null }),
 }));
