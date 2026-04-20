@@ -1,13 +1,16 @@
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { InputNodeData } from '../../types'
 
-export default function InputNode({ data }: NodeProps<InputNodeData>) {
+export default function InputNode({ data, selected }: NodeProps<InputNodeData>) {
+  const borderCls = selected
+    ? 'border-white shadow-[0_0_0_2px_rgba(255,255,255,0.25),0_0_12px_rgba(245,158,11,0.4)]'
+    : 'border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+
   return (
-    <div className="
-      relative bg-slate-800 border-2 border-amber-500 rounded-lg px-5 py-4
-      min-w-[108px] text-center
-      shadow-[0_0_12px_rgba(245,158,11,0.25)]
-    ">
+    <div className={`
+      relative bg-slate-800 border-2 ${borderCls} rounded-lg
+      w-[120px] px-4 py-3 text-center transition-shadow duration-100
+    `}>
       <div className="text-[9px] font-mono text-amber-500 uppercase tracking-[0.2em] mb-1">
         Input
       </div>
@@ -18,7 +21,7 @@ export default function InputNode({ data }: NodeProps<InputNodeData>) {
         items / min
       </div>
 
-      {/* Source handle — right side */}
+      {/* Source handle — solid dot (sends) */}
       <Handle
         type="source"
         position={Position.Right}

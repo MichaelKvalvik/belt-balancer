@@ -1,16 +1,18 @@
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { OutputNodeData } from '../../types'
 
-export default function OutputNode({ data }: NodeProps<OutputNodeData>) {
+export default function OutputNode({ data, selected }: NodeProps<OutputNodeData>) {
   const { targetRate, actualRate } = data
   const hasActual = actualRate !== undefined
   const satisfied = hasActual && Math.abs(actualRate - targetRate) < 0.001
 
-  const borderClass = hasActual
-    ? satisfied
-      ? 'border-green-500 shadow-[0_0_12px_rgba(34,197,94,0.3)]'
-      : 'border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
-    : 'border-slate-500 shadow-[0_0_12px_rgba(0,0,0,0.3)]'
+  const borderCls = selected
+    ? 'border-white shadow-[0_0_0_2px_rgba(255,255,255,0.25)]'
+    : hasActual
+      ? satisfied
+        ? 'border-green-500 shadow-[0_0_12px_rgba(34,197,94,0.3)]'
+        : 'border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
+      : 'border-slate-500 shadow-[0_0_12px_rgba(0,0,0,0.3)]'
 
   const rateColor = hasActual
     ? satisfied ? 'text-green-400' : 'text-red-400'
@@ -18,14 +20,14 @@ export default function OutputNode({ data }: NodeProps<OutputNodeData>) {
 
   return (
     <div className={`
-      relative bg-slate-800 border-2 ${borderClass} rounded-lg px-5 py-4
-      min-w-[108px] text-center transition-colors duration-300
+      relative bg-slate-800 border-2 ${borderCls} rounded-lg
+      w-[120px] px-4 py-3 text-center transition-shadow duration-100
     `}>
-      {/* Target handle — left side */}
+      {/* Target handle — hollow ring (receives) */}
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-3 !h-3 !bg-slate-500 !border-2 !border-slate-900 !rounded-full"
+        className="!w-3 !h-3 !bg-slate-900 !border-2 !border-slate-500 !rounded-full"
       />
 
       <div className="text-[9px] font-mono text-slate-500 uppercase tracking-[0.2em] mb-1">

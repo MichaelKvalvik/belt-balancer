@@ -44,11 +44,13 @@ export default function Canvas() {
       }
 
       if (e.key === 'r' || e.key === 'R') {
-        // Rotate all selected splitter/merger nodes
+        // Rotate selected splitter/merger nodes that have no connected edges
         const selected = nodes.filter(
           (n) => n.selected && (n.type === 'splitterNode' || n.type === 'mergerNode'),
         )
         for (const n of selected) {
+          const isConnected = edges.some((edge) => edge.source === n.id || edge.target === n.id)
+          if (isConnected) continue
           const cur = ((n.data as { rotation?: number }).rotation ?? 0) as Rotation
           rotateNode(n.id, nextRotation(cur))
         }
@@ -57,7 +59,7 @@ export default function Canvas() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [nodes, rotateNode, undo])
+  }, [nodes, edges, rotateNode, undo])
 
   // ── Drag-and-drop from palette ───────────────────────────────────────────
 
