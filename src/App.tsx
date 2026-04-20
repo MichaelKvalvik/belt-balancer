@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import Canvas from './components/Canvas'
 import WinModal from './components/WinModal'
+import Tutorial from './components/Tutorial'
+import Codex from './components/Codex'
 import { useGameStore } from './store/gameStore'
 import { levels } from './levels/levels'
 
@@ -92,6 +95,8 @@ function HintSection({
 // ── App ───────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const [showCodex, setShowCodex] = useState(false)
+
   const {
     nodes,
     flowResult,
@@ -112,10 +117,10 @@ export default function App() {
 
   const currentLevel = levels.find((l) => l.id === currentLevelId)
 
-  const splitterCount  = nodes.filter((n) => n.type === 'splitterNode').length
-  const mergerCount    = nodes.filter((n) => n.type === 'mergerNode').length
-  const splitterLeft   = nodeBudget.splitters - splitterCount
-  const mergerLeft     = nodeBudget.mergers   - mergerCount
+  const splitterCount = nodes.filter((n) => n.type === 'splitterNode').length
+  const mergerCount   = nodes.filter((n) => n.type === 'mergerNode').length
+  const splitterLeft  = nodeBudget.splitters - splitterCount
+  const mergerLeft    = nodeBudget.mergers   - mergerCount
 
   function handleNext() {
     const nextId = currentLevelId + 1
@@ -126,14 +131,12 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden">
 
-      {/* Win modal — fixed overlay */}
+      {/* Overlays */}
       {showWinModal && (
-        <WinModal
-          levelId={currentLevelId}
-          onNext={handleNext}
-          onClose={dismissWin}
-        />
+        <WinModal levelId={currentLevelId} onNext={handleNext} onClose={dismissWin} />
       )}
+      {showCodex && <Codex onClose={() => setShowCodex(false)} />}
+      <Tutorial />
 
       {/* ── Top bar ─────────────────────────────────────────────────── */}
       <header className="flex items-center gap-3 h-11 px-4 bg-slate-900 border-b border-slate-700 shrink-0 z-10">
@@ -193,6 +196,12 @@ export default function App() {
         >
           Reset
         </button>
+        <button
+          onClick={() => setShowCodex(true)}
+          className="px-3 py-1 text-xs font-mono rounded border border-slate-600 text-slate-400 hover:bg-slate-700 transition-colors"
+        >
+          Codex
+        </button>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -239,7 +248,7 @@ export default function App() {
         </aside>
 
         {/* ── Main canvas ──────────────────────────────────────────── */}
-        <main className="flex-1 relative overflow-hidden">
+        <main className="flex-1 relative overflow-hidden" data-tutorial="canvas">
           <Canvas />
         </main>
 
@@ -268,7 +277,6 @@ export default function App() {
                     <div key={out.id} className="bg-slate-800 rounded p-1.5 flex items-center gap-2">
                       <span className="text-[9px] font-mono text-slate-500 uppercase">Out</span>
                       <span className="text-slate-300 font-mono font-bold text-xs">{out.targetRate}/min</span>
-                      {/* Tick once solved */}
                       {flowResult?.outputResults[out.id]?.satisfied && (
                         <span className="ml-auto text-green-400 text-[10px]">✓</span>
                       )}
@@ -305,7 +313,7 @@ export default function App() {
           <div className="px-3 py-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest border-b border-slate-800">
             Node Palette
           </div>
-          <div className="p-3 space-y-2 border-b border-slate-800">
+          <div className="p-3 space-y-2 border-b border-slate-800" data-tutorial="palette">
             <PaletteItem
               nodeType="splitterNode"
               label="Splitter"
