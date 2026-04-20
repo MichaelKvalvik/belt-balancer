@@ -369,3 +369,84 @@ describe('solveFlow', () => {
   });
 
 });
+
+// ── Level reference solutions ──────────────────────────────────────────────
+// These pin the exact graphs the levels are designed around.
+
+describe('level reference solutions', () => {
+
+  it('L1: 60 → Splitter → [30, 30]', () => {
+    const graph: Graph = {
+      nodes: [n.input('in-1', 60), n.splitter('s1'), n.output('out-1', 30), n.output('out-2', 30)],
+      edges: [e('e1','in-1','s1'), e('e2','s1','out-1'), e('e3','s1','out-2')],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(30)
+    expect(r.edgeRates['e3']).toBeCloseTo(30)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L2: 60 → Splitter(3) → [20, 20, 20]', () => {
+    const graph: Graph = {
+      nodes: [n.input('in-1', 60), n.splitter('s1'),
+              n.output('out-1', 20), n.output('out-2', 20), n.output('out-3', 20)],
+      edges: [e('e1','in-1','s1'), e('e2','s1','out-1'), e('e3','s1','out-2'), e('e4','s1','out-3')],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(20)
+    expect(r.edgeRates['e3']).toBeCloseTo(20)
+    expect(r.edgeRates['e4']).toBeCloseTo(20)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L3: 120 → S1 → [S2→[30,30], S3→[30,30]]', () => {
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 120), n.splitter('s1'), n.splitter('s2'), n.splitter('s3'),
+        n.output('out-1', 30), n.output('out-2', 30), n.output('out-3', 30), n.output('out-4', 30),
+      ],
+      edges: [
+        e('e1','in-1','s1'), e('e2','s1','s2'), e('e3','s1','s3'),
+        e('e4','s2','out-1'), e('e5','s2','out-2'),
+        e('e6','s3','out-3'), e('e7','s3','out-4'),
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(60)
+    expect(r.edgeRates['e4']).toBeCloseTo(30)
+    expect(r.edgeRates['e7']).toBeCloseTo(30)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L4: [60, 60] → Merger → 120', () => {
+    const graph: Graph = {
+      nodes: [n.input('in-1', 60), n.input('in-2', 60), n.merger('m1'), n.output('out-1', 120)],
+      edges: [e('e1','in-1','m1'), e('e2','in-2','m1'), e('e3','m1','out-1')],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e3']).toBeCloseTo(120)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L5: 60 → S1→[30→M, 30→S2→[15→M, 15→out-2]] → M→45, out-2→15', () => {
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 60), n.splitter('s1'), n.splitter('s2'),
+        n.merger('m1'), n.output('out-1', 45), n.output('out-2', 15),
+      ],
+      edges: [
+        e('e1','in-1','s1'),
+        e('e2','s1','m1'),    // 30 → merger
+        e('e3','s1','s2'),    // 30 → s2
+        e('e4','s2','m1'),    // 15 → merger
+        e('e5','s2','out-2'), // 15 → out-2
+        e('e6','m1','out-1'), // 45 → out-1
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e6']).toBeCloseTo(45)
+    expect(r.edgeRates['e5']).toBeCloseTo(15)
+    expect(r.satisfied).toBe(true)
+  })
+
+})
