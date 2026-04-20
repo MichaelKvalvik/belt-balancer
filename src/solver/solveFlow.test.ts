@@ -449,4 +449,270 @@ describe('level reference solutions', () => {
     expect(r.satisfied).toBe(true)
   })
 
+  it('L6: [120, 120] → M → S(÷3) → [80×3]', () => {
+    // Two inputs merge to 240, then split three ways → 80 each
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 120), n.input('in-2', 120),
+        n.merger('m1'), n.splitter('s1'),
+        n.output('out-1', 80), n.output('out-2', 80), n.output('out-3', 80),
+      ],
+      edges: [
+        e('e1','in-1','m1'), e('e2','in-2','m1'),
+        e('e3','m1','s1'),
+        e('e4','s1','out-1'), e('e5','s1','out-2'), e('e6','s1','out-3'),
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e3']).toBeCloseTo(240)
+    expect(r.edgeRates['e4']).toBeCloseTo(80)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L7: 5-way loopback — 300 → [60×5] (Y=360, 1 stream loops back)', () => {
+    // Y = M throughput. M←[in(300), loopback(Y/6)]
+    // M→S1(÷2)→[Y/2, Y/2]→S2,S3(each ÷3)→6 streams of Y/6
+    // 5 streams → outputs, 1 loops back to M
+    // Y = 300 + Y/6  →  Y = 360, each output = 60
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 300),
+        n.merger('m1'), n.splitter('s1'), n.splitter('s2'), n.splitter('s3'),
+        n.output('out-1', 60), n.output('out-2', 60), n.output('out-3', 60),
+        n.output('out-4', 60), n.output('out-5', 60),
+      ],
+      edges: [
+        e('e1','in-1','m1'),    // 300 → merger in-0
+        e('e2','m1','s1'),      // Y → s1
+        e('e3','s1','s2'),      // Y/2 → s2
+        e('e4','s1','s3'),      // Y/2 → s3
+        e('e5','s2','out-1'),   // Y/6 → out-1
+        e('e6','s2','out-2'),   // Y/6 → out-2
+        e('e7','s2','out-3'),   // Y/6 → out-3
+        e('e8','s3','out-4'),   // Y/6 → out-4
+        e('e9','s3','out-5'),   // Y/6 → out-5
+        e('e10','s3','m1'),     // Y/6 → loopback to merger in-1
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(360)   // M throughput
+    expect(r.edgeRates['e5']).toBeCloseTo(60)    // each output stream
+    expect(r.edgeRates['e10']).toBeCloseTo(60)   // loopback
+    expect(r.satisfied).toBe(true)
+    expect(r.unstable).toBe(false)
+  })
+
+  it('L8: 360 → S1(÷3) → [S2,S3,S4](each ÷2) → [60×6]', () => {
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 360),
+        n.splitter('s1'), n.splitter('s2'), n.splitter('s3'), n.splitter('s4'),
+        n.output('out-1', 60), n.output('out-2', 60), n.output('out-3', 60),
+        n.output('out-4', 60), n.output('out-5', 60), n.output('out-6', 60),
+      ],
+      edges: [
+        e('e1','in-1','s1'),
+        e('e2','s1','s2'), e('e3','s1','s3'), e('e4','s1','s4'),
+        e('e5','s2','out-1'), e('e6','s2','out-2'),
+        e('e7','s3','out-3'), e('e8','s3','out-4'),
+        e('e9','s4','out-5'), e('e10','s4','out-6'),
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(120)  // each S1 output
+    expect(r.edgeRates['e5']).toBeCloseTo(60)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L9: [120×4] → M1(3-in) + M2 → S(÷3) → [160×3]', () => {
+    // M1 gets 3 inputs of 120 = 360; M2 gets M1 + 4th input = 480; S÷3 = 160 each
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 120), n.input('in-2', 120),
+        n.input('in-3', 120), n.input('in-4', 120),
+        n.merger('m1'), n.merger('m2'), n.splitter('s1'),
+        n.output('out-1', 160), n.output('out-2', 160), n.output('out-3', 160),
+      ],
+      edges: [
+        e('e1','in-1','m1'), e('e2','in-2','m1'), e('e3','in-3','m1'),
+        e('e4','m1','m2'), e('e5','in-4','m2'),
+        e('e6','m2','s1'),
+        e('e7','s1','out-1'), e('e8','s1','out-2'), e('e9','s1','out-3'),
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e6']).toBeCloseTo(480)
+    expect(r.edgeRates['e7']).toBeCloseTo(160)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L10: 360 → S1(÷2)→[180→out-1, 180→S2(÷3)→[60→out-3, 60+60→M→out-2(120)]]', () => {
+    // S1 splits 360→[180, 180]. First 180 → out-1.
+    // Second 180 → S2(÷3)→[60×3]: one to out-3, two feed M1→out-2(120)
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 360),
+        n.splitter('s1'), n.splitter('s2'), n.merger('m1'),
+        n.output('out-1', 180), n.output('out-2', 120), n.output('out-3', 60),
+      ],
+      edges: [
+        e('e1','in-1','s1'),
+        e('e2','s1','out-1'),  // 180
+        e('e3','s1','s2'),     // 180 → S2
+        e('e4','s2','out-3'),  // 60
+        e('e5','s2','m1'),     // 60 → merger in-0
+        e('e6','s2','m1'),     // 60 → merger in-1  (second edge s2→m1)
+        e('e7','m1','out-2'),  // 120
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(180)
+    expect(r.edgeRates['e7']).toBeCloseTo(120)
+    expect(r.edgeRates['e4']).toBeCloseTo(60)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L11: [480, 240] → M → S(÷3) → [240×3]', () => {
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 480), n.input('in-2', 240),
+        n.merger('m1'), n.splitter('s1'),
+        n.output('out-1', 240), n.output('out-2', 240), n.output('out-3', 240),
+      ],
+      edges: [
+        e('e1','in-1','m1'), e('e2','in-2','m1'),
+        e('e3','m1','s1'),
+        e('e4','s1','out-1'), e('e5','s1','out-2'), e('e6','s1','out-3'),
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e3']).toBeCloseTo(720)
+    expect(r.edgeRates['e4']).toBeCloseTo(240)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L12: 7-way loopback — 420 → [60×7] (Y=540, 2 streams loop back)', () => {
+    // Y = M throughput. M←[in(420), lb1(Y/9), lb2(Y/9)]
+    // M→S1(÷3)→[Y/3×3]→S2,S3,S4(each ÷3)→9 streams of Y/9
+    // 7 → outputs, 2 loop back  →  Y = 420 + 2Y/9  →  Y = 540, each output = 60
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 420),
+        n.merger('m1'), n.splitter('s1'),
+        n.splitter('s2'), n.splitter('s3'), n.splitter('s4'),
+        n.output('out-1', 60), n.output('out-2', 60), n.output('out-3', 60),
+        n.output('out-4', 60), n.output('out-5', 60),
+        n.output('out-6', 60), n.output('out-7', 60),
+      ],
+      edges: [
+        e('e1','in-1','m1'),    // 420 → m1 in-0
+        e('e2','m1','s1'),      // Y → s1
+        e('e3','s1','s2'),      // Y/3 → s2
+        e('e4','s1','s3'),      // Y/3 → s3
+        e('e5','s1','s4'),      // Y/3 → s4
+        e('e6','s2','out-1'), e('e7','s2','out-2'), e('e8','s2','out-3'),
+        e('e9','s3','out-4'), e('e10','s3','out-5'),
+        e('e11','s3','m1'),     // loopback 1 → m1 in-1
+        e('e12','s4','out-6'), e('e13','s4','out-7'),
+        e('e14','s4','m1'),     // loopback 2 → m1 in-2
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(540)   // M throughput
+    expect(r.edgeRates['e3']).toBeCloseTo(180)   // each S1 output
+    expect(r.edgeRates['e6']).toBeCloseTo(60)    // each output stream
+    expect(r.edgeRates['e11']).toBeCloseTo(60)   // loopback 1
+    expect(r.edgeRates['e14']).toBeCloseTo(60)   // loopback 2
+    expect(r.satisfied).toBe(true)
+    expect(r.unstable).toBe(false)
+  })
+
+  it('L13: 450 → S1(÷3)→[150→out-1, 150+150→M→S2(÷3)→[100×3]]', () => {
+    // S1 splits 450→[150×3]. Keep one 150 for out-1.
+    // Other two 150s merge (M=300) → S2(÷3) → [100×3]
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 450),
+        n.splitter('s1'), n.merger('m1'), n.splitter('s2'),
+        n.output('out-1', 150), n.output('out-2', 100),
+        n.output('out-3', 100), n.output('out-4', 100),
+      ],
+      edges: [
+        e('e1','in-1','s1'),
+        e('e2','s1','out-1'),  // 150
+        e('e3','s1','m1'),     // 150 → m1 in-0
+        e('e4','s1','m1'),     // 150 → m1 in-1
+        e('e5','m1','s2'),     // 300
+        e('e6','s2','out-2'), e('e7','s2','out-3'), e('e8','s2','out-4'),
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(150)
+    expect(r.edgeRates['e5']).toBeCloseTo(300)
+    expect(r.edgeRates['e6']).toBeCloseTo(100)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L14: 480 → S1(÷2)→[240→out-1, 240→S2(÷2)→[120→out-2, 120→S3(÷3)→[40→out-4, 40+40→M→out-3(80)]]]', () => {
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 480),
+        n.splitter('s1'), n.splitter('s2'), n.splitter('s3'), n.merger('m1'),
+        n.output('out-1', 240), n.output('out-2', 120),
+        n.output('out-3', 80), n.output('out-4', 40),
+      ],
+      edges: [
+        e('e1','in-1','s1'),
+        e('e2','s1','out-1'),  // 240
+        e('e3','s1','s2'),     // 240
+        e('e4','s2','out-2'),  // 120
+        e('e5','s2','s3'),     // 120
+        e('e6','s3','out-4'),  // 40
+        e('e7','s3','m1'),     // 40 → m1 in-0
+        e('e8','s3','m1'),     // 40 → m1 in-1
+        e('e9','m1','out-3'),  // 80
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e2']).toBeCloseTo(240)
+    expect(r.edgeRates['e4']).toBeCloseTo(120)
+    expect(r.edgeRates['e6']).toBeCloseTo(40)
+    expect(r.edgeRates['e9']).toBeCloseTo(80)
+    expect(r.satisfied).toBe(true)
+  })
+
+  it('L15: boss loopback — [300×3] → [180×5] (M1=900, Y=1080, 1 stream loops back)', () => {
+    // M1 sums 3×300=900. M2←[M1(900), loopback(Y/6)].
+    // M2→S1(÷2)→[Y/2×2]→S2,S3(each ÷3)→6 streams of Y/6.
+    // 5 → outputs, 1 loops back to M2.
+    // Y = 900 + Y/6  →  Y = 1080, each output = 180
+    const graph: Graph = {
+      nodes: [
+        n.input('in-1', 300), n.input('in-2', 300), n.input('in-3', 300),
+        n.merger('m1'), n.merger('m2'),
+        n.splitter('s1'), n.splitter('s2'), n.splitter('s3'),
+        n.output('out-1', 180), n.output('out-2', 180), n.output('out-3', 180),
+        n.output('out-4', 180), n.output('out-5', 180),
+      ],
+      edges: [
+        e('e1','in-1','m1'), e('e2','in-2','m1'), e('e3','in-3','m1'),
+        e('e4','m1','m2'),      // 900 → m2 in-0
+        e('e5','m2','s1'),      // Y → s1
+        e('e6','s1','s2'),      // Y/2 → s2
+        e('e7','s1','s3'),      // Y/2 → s3
+        e('e8','s2','out-1'), e('e9','s2','out-2'), e('e10','s2','out-3'),
+        e('e11','s3','out-4'), e('e12','s3','out-5'),
+        e('e13','s3','m2'),     // loopback Y/6 → m2 in-1
+      ],
+    }
+    const r = solveFlow(graph)
+    expect(r.edgeRates['e4']).toBeCloseTo(900)   // M1 throughput
+    expect(r.edgeRates['e5']).toBeCloseTo(1080)  // M2 throughput (Y)
+    expect(r.edgeRates['e6']).toBeCloseTo(540)   // S1 half
+    expect(r.edgeRates['e8']).toBeCloseTo(180)   // each output stream
+    expect(r.edgeRates['e13']).toBeCloseTo(180)  // loopback
+    expect(r.satisfied).toBe(true)
+    expect(r.unstable).toBe(false)
+  })
+
 })
