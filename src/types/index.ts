@@ -19,10 +19,12 @@ export interface OutputNodeData {
 
 export interface SplitterNodeData {
   kind: 'splitter';
+  rotation?: 0 | 90 | 180 | 270;
 }
 
 export interface MergerNodeData {
   kind: 'merger';
+  rotation?: 0 | 90 | 180 | 270;
 }
 
 export type GameNodeData =

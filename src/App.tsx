@@ -100,11 +100,14 @@ export default function App() {
     completedLevelIds,
     showWinModal,
     hintsRevealed,
+    history,
     validate,
     resetGraph,
     loadLevel,
     dismissWin,
     revealHint,
+    undo,
+    deleteSelected,
   } = useGameStore()
 
   const currentLevel = levels.find((l) => l.id === currentLevelId)
@@ -164,6 +167,21 @@ export default function App() {
         )}
 
         <button
+          onClick={undo}
+          disabled={history.length === 0}
+          className="px-3 py-1 text-xs font-mono rounded border border-slate-600 text-slate-400 hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Undo (Ctrl+Z)"
+        >
+          Undo
+        </button>
+        <button
+          onClick={deleteSelected}
+          className="px-3 py-1 text-xs font-mono rounded border border-slate-600 text-slate-400 hover:bg-slate-700 transition-colors"
+          title="Delete selected (Del)"
+        >
+          Delete
+        </button>
+        <button
           onClick={validate}
           className="px-3 py-1 text-xs font-mono rounded border border-amber-500/50 text-amber-400 hover:bg-amber-500/10 active:bg-amber-500/20 transition-colors"
         >
@@ -174,12 +192,6 @@ export default function App() {
           className="px-3 py-1 text-xs font-mono rounded border border-slate-600 text-slate-400 hover:bg-slate-700 transition-colors"
         >
           Reset
-        </button>
-        <button
-          disabled
-          className="px-3 py-1 text-xs font-mono rounded border border-slate-700 text-slate-600 cursor-not-allowed"
-        >
-          Codex
         </button>
       </header>
 

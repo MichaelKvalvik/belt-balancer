@@ -18,8 +18,8 @@ export default function OutputNode({ data }: NodeProps<OutputNodeData>) {
 
   return (
     <div className={`
-      relative bg-slate-800 border-2 ${borderClass} rounded-lg px-4 py-3
-      min-w-[96px] text-center transition-colors duration-300
+      relative bg-slate-800 border-2 ${borderClass} rounded-lg px-5 py-4
+      min-w-[108px] text-center transition-colors duration-300
     `}>
       {/* Target handle — left side */}
       <Handle

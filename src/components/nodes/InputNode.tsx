@@ -4,8 +4,8 @@ import type { InputNodeData } from '../../types'
 export default function InputNode({ data }: NodeProps<InputNodeData>) {
   return (
     <div className="
-      relative bg-slate-800 border-2 border-amber-500 rounded-lg px-4 py-3
-      min-w-[96px] text-center
+      relative bg-slate-800 border-2 border-amber-500 rounded-lg px-5 py-4
+      min-w-[108px] text-center
       shadow-[0_0_12px_rgba(245,158,11,0.25)]
     ">
       <div className="text-[9px] font-mono text-amber-500 uppercase tracking-[0.2em] mb-1">

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -10,6 +10,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 
 import { useGameStore } from '../store/gameStore'
+import { nextRotation, type Rotation } from '../utils/rotation'
 import InputNode from './nodes/InputNode'
 import OutputNode from './nodes/OutputNode'
 import SplitterNode from './nodes/SplitterNode'
@@ -26,8 +27,37 @@ export default function Canvas() {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null)
 
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, rotateNode, undo } =
     useGameStore()
+
+  // ── Keyboard shortcuts ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+      if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        undo()
+        return
+      }
+
+      if (e.key === 'r' || e.key === 'R') {
+        // Rotate all selected splitter/merger nodes
+        const selected = nodes.filter(
+          (n) => n.selected && (n.type === 'splitterNode' || n.type === 'mergerNode'),
+        )
+        for (const n of selected) {
+          const cur = ((n.data as { rotation?: number }).rotation ?? 0) as Rotation
+          rotateNode(n.id, nextRotation(cur))
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [nodes, rotateNode, undo])
 
   // ── Drag-and-drop from palette ───────────────────────────────────────────
 
@@ -53,11 +83,6 @@ export default function Canvas() {
   )
 
   // ── Connection validation ────────────────────────────────────────────────
-  // Rules:
-  //   • Input nodes are sources only (nothing can target them)
-  //   • Output nodes are sinks only (nothing can source from them)
-  //   • No self-loops
-  //   • Each handle slot accepts exactly one edge (prevents duplicate wires)
 
   const isValidConnection = useCallback(
     (connection: Connection) => {

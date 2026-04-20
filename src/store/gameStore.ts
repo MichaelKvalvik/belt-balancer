@@ -20,28 +20,43 @@ import type {
   FlowResult,
   LevelDef,
 } from '../types'
+import type { Rotation } from '../utils/rotation'
 import { solveFlow } from '../solver/solveFlow'
 import { levels } from '../levels/levels'
 
 // ── localStorage helpers ───────────────────────────────────────────────────
 
-const STORAGE_KEY = 'belt-balancer-progress'
+const PROGRESS_KEY = 'belt-balancer-progress'
+const canvasKey = (levelId: number) => `belt-balancer-canvas-${levelId}`
 
 function loadProgress(): number[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(PROGRESS_KEY)
     return raw ? (JSON.parse(raw) as number[]) : []
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 
 function saveProgress(ids: number[]): void {
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(ids)) } catch { /* noop */ }
+}
+
+interface CanvasSnapshot { nodes: Node[]; edges: Edge[] }
+
+function saveCanvas(levelId: number, nodes: Node[], edges: Edge[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(ids))
-  } catch {
-    /* localStorage unavailable (e.g. private browsing) — fail silently */
-  }
+    localStorage.setItem(canvasKey(levelId), JSON.stringify({ nodes, edges }))
+  } catch { /* noop */ }
+}
+
+function loadCanvas(levelId: number): CanvasSnapshot | null {
+  try {
+    const raw = localStorage.getItem(canvasKey(levelId))
+    return raw ? (JSON.parse(raw) as CanvasSnapshot) : null
+  } catch { return null }
+}
+
+function clearCanvas(levelId: number): void {
+  try { localStorage.removeItem(canvasKey(levelId)) } catch { /* noop */ }
 }
 
 // ── Graph helpers ──────────────────────────────────────────────────────────
@@ -80,7 +95,6 @@ function nodesFromLevel(level: LevelDef): Node[] {
     type: 'inputNode',
     position: inp.position,
     deletable: false,
-    draggable: false,
     data: { kind: 'input', rate: inp.rate } satisfies InputNodeData,
   }))
   const outputNodes: Node[] = level.outputs.map((out) => ({
@@ -88,7 +102,6 @@ function nodesFromLevel(level: LevelDef): Node[] {
     type: 'outputNode',
     position: out.position,
     deletable: false,
-    draggable: false,
     data: { kind: 'output', targetRate: out.targetRate } satisfies OutputNodeData,
   }))
   return [...inputNodes, ...outputNodes]
@@ -102,6 +115,41 @@ function fmtRate(rate: number): string {
 function snapTo20(v: number) {
   return Math.round(v / 20) * 20
 }
+
+// ── Live solver helper ─────────────────────────────────────────────────────
+
+function runSolverAndStamp(
+  nodes: Node[],
+  edges: Edge[],
+): { nodes: Node[]; edges: Edge[]; flowResult: FlowResult } {
+  const result = solveFlow(buildGraph(nodes, edges))
+
+  const stampedNodes = nodes.map((node) => {
+    if (node.type !== 'outputNode') return node
+    const or = result.outputResults[node.id]
+    return or ? { ...node, data: { ...node.data, actualRate: or.actual } } : node
+  })
+
+  const stampedEdges = edges.map((edge) => {
+    const rate = result.edgeRates[edge.id]
+    if (rate === undefined) return edge
+    return {
+      ...edge,
+      label: fmtRate(rate),
+      labelStyle: { fill: '#f59e0b', fontFamily: 'ui-monospace, monospace', fontSize: 11 },
+      labelBgStyle: { fill: '#0f172a', fillOpacity: 0.9 },
+      labelBgPadding: [4, 3] as [number, number],
+    }
+  })
+
+  return { nodes: stampedNodes, edges: stampedEdges, flowResult: result }
+}
+
+// ── History (undo) ─────────────────────────────────────────────────────────
+
+const MAX_HISTORY = 30
+
+interface HistoryEntry { nodes: Node[]; edges: Edge[] }
 
 // ── Store interface ────────────────────────────────────────────────────────
 
@@ -117,17 +165,23 @@ interface GameState {
   flowResult: FlowResult | null
   nodeBudget: NodeBudget
 
+  // History
+  history: HistoryEntry[]
+
   // Level
   currentLevelId: number
   completedLevelIds: number[]
   showWinModal: boolean
-  hintsRevealed: number   // 0–3
+  hintsRevealed: number
 
   // Canvas actions
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
   addNode: (type: string, position: { x: number; y: number }) => void
+  deleteSelected: () => void
+  rotateNode: (id: string, rotation: Rotation) => void
+  undo: () => void
   validate: () => void
   resetGraph: () => void
 
@@ -137,48 +191,106 @@ interface GameState {
   revealHint: () => void
 }
 
-// ── Initial state from level 1 ─────────────────────────────────────────────
+// ── Store ──────────────────────────────────────────────────────────────────
 
 const firstLevel = levels[0]
 
-// ── Store ──────────────────────────────────────────────────────────────────
+function makeInitialState(level: LevelDef) {
+  const saved = loadCanvas(level.id)
+  const baseNodes = saved ? saved.nodes : nodesFromLevel(level)
+  const baseEdges = saved ? saved.edges : []
+  const stamped = runSolverAndStamp(baseNodes, baseEdges)
+  return {
+    nodes: stamped.nodes,
+    edges: stamped.edges,
+    flowResult: stamped.flowResult,
+  }
+}
+
+const initial = makeInitialState(firstLevel)
 
 export const useGameStore = create<GameState>((set, get) => ({
-  nodes: nodesFromLevel(firstLevel),
-  edges: [],
-  flowResult: null,
+  nodes: initial.nodes,
+  edges: initial.edges,
+  flowResult: initial.flowResult,
   nodeBudget: firstLevel.nodeBudget,
+  history: [],
 
   currentLevelId: firstLevel.id,
   completedLevelIds: loadProgress(),
   showWinModal: false,
   hintsRevealed: 0,
 
+  // ── Helper: push snapshot to history ──────────────────────────────────────
+
   // ── Canvas mutations ─────────────────────────────────────────────────────
 
   onNodesChange: (changes) =>
-    set((s) => ({
-      nodes: applyNodeChanges(changes, s.nodes),
-      flowResult: null,
-    })),
+    set((s) => {
+      const newNodes = applyNodeChanges(changes, s.nodes)
+      const { nodes, edges, flowResult } = runSolverAndStamp(newNodes, s.edges)
+      saveCanvas(s.currentLevelId, nodes, edges)
+
+      let completedLevelIds = s.completedLevelIds
+      let showWinModal = s.showWinModal
+      if (!s.flowResult?.satisfied && flowResult.satisfied) {
+        showWinModal = true
+        if (!completedLevelIds.includes(s.currentLevelId)) {
+          completedLevelIds = [...completedLevelIds, s.currentLevelId]
+          saveProgress(completedLevelIds)
+        }
+      }
+
+      return { nodes, edges, flowResult, completedLevelIds, showWinModal }
+    }),
 
   onEdgesChange: (changes) =>
-    set((s) => ({
-      edges: applyEdgeChanges(changes, s.edges),
-      flowResult: null,
-    })),
+    set((s) => {
+      const newEdges = applyEdgeChanges(changes, s.edges)
+      const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
+      saveCanvas(s.currentLevelId, nodes, edges)
+
+      let completedLevelIds = s.completedLevelIds
+      let showWinModal = s.showWinModal
+      if (!s.flowResult?.satisfied && flowResult.satisfied) {
+        showWinModal = true
+        if (!completedLevelIds.includes(s.currentLevelId)) {
+          completedLevelIds = [...completedLevelIds, s.currentLevelId]
+          saveProgress(completedLevelIds)
+        }
+      }
+
+      return { nodes, edges, flowResult, completedLevelIds, showWinModal }
+    }),
 
   onConnect: (connection) =>
-    set((s) => ({
-      edges: addEdge(
+    set((s) => {
+      const history = [
+        ...s.history.slice(-(MAX_HISTORY - 1)),
+        { nodes: s.nodes, edges: s.edges },
+      ]
+      const newEdges = addEdge(
         { ...connection, animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 } },
         s.edges,
-      ),
-      flowResult: null,
-    })),
+      )
+      const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
+      saveCanvas(s.currentLevelId, nodes, edges)
+
+      let completedLevelIds = s.completedLevelIds
+      let showWinModal = s.showWinModal
+      if (!s.flowResult?.satisfied && flowResult.satisfied) {
+        showWinModal = true
+        if (!completedLevelIds.includes(s.currentLevelId)) {
+          completedLevelIds = [...completedLevelIds, s.currentLevelId]
+          saveProgress(completedLevelIds)
+        }
+      }
+
+      return { nodes, edges, flowResult, history, completedLevelIds, showWinModal }
+    }),
 
   addNode: (type, position) => {
-    const { nodes, nodeBudget } = get()
+    const { nodes, edges, nodeBudget, currentLevelId } = get()
     const splitters = nodes.filter((n) => n.type === 'splitterNode').length
     const mergers   = nodes.filter((n) => n.type === 'mergerNode').length
     if (type === 'splitterNode' && splitters >= nodeBudget.splitters) return
@@ -187,8 +299,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const id = `${type.replace('Node', '')}-${Date.now()}`
     const data: GameNodeData =
       type === 'splitterNode'
-        ? ({ kind: 'splitter' } satisfies SplitterNodeData)
-        : ({ kind: 'merger'   } satisfies MergerNodeData)
+        ? ({ kind: 'splitter', rotation: 0 } satisfies SplitterNodeData)
+        : ({ kind: 'merger',   rotation: 0 } satisfies MergerNodeData)
 
     const newNode: Node = {
       id,
@@ -196,50 +308,74 @@ export const useGameStore = create<GameState>((set, get) => ({
       position: { x: snapTo20(position.x), y: snapTo20(position.y) },
       data,
     }
-    set((s) => ({ nodes: [...s.nodes, newNode], flowResult: null }))
+
+    set((s) => {
+      const history = [
+        ...s.history.slice(-(MAX_HISTORY - 1)),
+        { nodes: s.nodes, edges: s.edges },
+      ]
+      const newNodes = [...s.nodes, newNode]
+      const { nodes: stampedNodes, edges: stampedEdges, flowResult } =
+        runSolverAndStamp(newNodes, edges)
+      saveCanvas(currentLevelId, stampedNodes, stampedEdges)
+      return { nodes: stampedNodes, edges: stampedEdges, flowResult, history }
+    })
   },
 
+  deleteSelected: () =>
+    set((s) => {
+      const history = [
+        ...s.history.slice(-(MAX_HISTORY - 1)),
+        { nodes: s.nodes, edges: s.edges },
+      ]
+      const keepNodes = s.nodes.filter((n) => !n.selected || n.deletable === false)
+      const keepNodeIds = new Set(keepNodes.map((n) => n.id))
+      const keepEdges = s.edges.filter(
+        (e) => !e.selected && keepNodeIds.has(e.source) && keepNodeIds.has(e.target),
+      )
+      const { nodes, edges, flowResult } = runSolverAndStamp(keepNodes, keepEdges)
+      saveCanvas(s.currentLevelId, nodes, edges)
+      return { nodes, edges, flowResult, history }
+    }),
+
+  rotateNode: (id, rotation) =>
+    set((s) => {
+      const history = [
+        ...s.history.slice(-(MAX_HISTORY - 1)),
+        { nodes: s.nodes, edges: s.edges },
+      ]
+      const newNodes = s.nodes.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, rotation } } : n,
+      )
+      const { nodes, edges, flowResult } = runSolverAndStamp(newNodes, s.edges)
+      saveCanvas(s.currentLevelId, nodes, edges)
+      return { nodes, edges, flowResult, history }
+    }),
+
+  undo: () =>
+    set((s) => {
+      if (s.history.length === 0) return {}
+      const prev = s.history[s.history.length - 1]
+      const history = s.history.slice(0, -1)
+      const { nodes, edges, flowResult } = runSolverAndStamp(prev.nodes, prev.edges)
+      saveCanvas(s.currentLevelId, nodes, edges)
+      return { nodes, edges, flowResult, history }
+    }),
+
   validate: () => {
-    const { nodes, edges, currentLevelId, completedLevelIds } = get()
-    const result = solveFlow(buildGraph(nodes, edges))
-
-    // Stamp actualRate onto output nodes.
-    const updatedNodes = nodes.map((node) => {
-      if (node.type !== 'outputNode') return node
-      const or = result.outputResults[node.id]
-      return or ? { ...node, data: { ...node.data, actualRate: or.actual } } : node
-    })
-
-    // Stamp rate labels onto edges.
-    const updatedEdges = edges.map((edge) => {
-      const rate = result.edgeRates[edge.id]
-      if (rate === undefined) return edge
-      return {
-        ...edge,
-        label: fmtRate(rate),
-        labelStyle: { fill: '#f59e0b', fontFamily: 'ui-monospace, monospace', fontSize: 11 },
-        labelBgStyle: { fill: '#0f172a', fillOpacity: 0.9 },
-        labelBgPadding: [4, 3] as [number, number],
+    // Re-runs solver and triggers win modal (idempotent).
+    set((s) => {
+      const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, s.edges)
+      let completedLevelIds = s.completedLevelIds
+      let showWinModal = s.showWinModal
+      if (flowResult.satisfied) {
+        showWinModal = true
+        if (!completedLevelIds.includes(s.currentLevelId)) {
+          completedLevelIds = [...completedLevelIds, s.currentLevelId]
+          saveProgress(completedLevelIds)
+        }
       }
-    })
-
-    // Win detection: record completion on first solve.
-    let newCompleted = completedLevelIds
-    let showWin = false
-    if (result.satisfied) {
-      showWin = true
-      if (!completedLevelIds.includes(currentLevelId)) {
-        newCompleted = [...completedLevelIds, currentLevelId]
-        saveProgress(newCompleted)
-      }
-    }
-
-    set({
-      nodes: updatedNodes,
-      edges: updatedEdges,
-      flowResult: result,
-      completedLevelIds: newCompleted,
-      showWinModal: showWin,
+      return { nodes, edges, flowResult, completedLevelIds, showWinModal }
     })
   },
 
@@ -247,10 +383,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { currentLevelId } = get()
     const level = levels.find((l) => l.id === currentLevelId)
     if (!level) return
+    clearCanvas(currentLevelId)
+    const baseNodes = nodesFromLevel(level)
+    const { nodes, edges, flowResult } = runSolverAndStamp(baseNodes, [])
     set({
-      nodes: nodesFromLevel(level),
-      edges: [],
-      flowResult: null,
+      nodes,
+      edges,
+      flowResult,
+      history: [],
       showWinModal: false,
       hintsRevealed: 0,
     })
@@ -261,12 +401,17 @@ export const useGameStore = create<GameState>((set, get) => ({
   loadLevel: (levelId) => {
     const level = levels.find((l) => l.id === levelId)
     if (!level) return
+    const saved = loadCanvas(levelId)
+    const baseNodes = saved ? saved.nodes : nodesFromLevel(level)
+    const baseEdges = saved ? saved.edges : []
+    const { nodes, edges, flowResult } = runSolverAndStamp(baseNodes, baseEdges)
     set({
       currentLevelId: levelId,
-      nodes: nodesFromLevel(level),
-      edges: [],
-      flowResult: null,
+      nodes,
+      edges,
+      flowResult,
       nodeBudget: level.nodeBudget,
+      history: [],
       showWinModal: false,
       hintsRevealed: 0,
     })
