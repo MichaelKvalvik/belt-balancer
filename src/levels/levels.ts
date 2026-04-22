@@ -33,6 +33,16 @@ export const levels: LevelDef[] = [
       'A Splitter divides its incoming rate equally among all connected outputs.',
       'Place a Splitter in the middle. Wire: Input → Splitter → both Outputs.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 270, y: 140 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-s1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s1', target: 'out-2',  sourceHandle: 'out-1' },
+      ],
+    },
   },
 
   // ── 2. Thirds ────────────────────────────────────────────────────────────
@@ -56,6 +66,17 @@ export const levels: LevelDef[] = [
       'The split ratio depends on how many outputs are connected — 3 connected = 1/3 each.',
       'One Splitter, all three outputs wired → 60 ÷ 3 = 20/min each.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 270, y: 160 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-s1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s1', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s1', target: 'out-3',  sourceHandle: 'out-2' },
+      ],
+    },
   },
 
   // ── 3. Four Belts ────────────────────────────────────────────────────────
@@ -80,6 +101,22 @@ export const levels: LevelDef[] = [
       '120 → S1(2 outputs) → [60, 60]. Each 60 → its own Splitter(2 outputs) → [30, 30].',
       'S1: 120 → 60 + 60.  S2: 60 → 30 + 30.  S3: 60 → 30 + 30.  Total: 3 splitters.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 220, y: 220 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 380, y: 100 } },
+        { id: 'sol-s3', type: 'splitterNode', position: { x: 380, y: 340 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-s1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s2', sourceHandle: 'out-0', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s3', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s2', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s2', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s3', target: 'out-3',  sourceHandle: 'out-0' },
+        { source: 'sol-s3', target: 'out-4',  sourceHandle: 'out-1' },
+      ],
+    },
   },
 
   // ── 4. Two Into One ──────────────────────────────────────────────────────
@@ -102,6 +139,16 @@ export const levels: LevelDef[] = [
       'A Merger sums all its connected inputs into one output.',
       'Place one Merger. Connect both Inputs to its left ports, then its right port to the Output.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-m1', type: 'mergerNode', position: { x: 280, y: 190 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-m1', targetHandle: 'in-0' },
+        { source: 'in-2',   target: 'sol-m1', targetHandle: 'in-1' },
+        { source: 'sol-m1', target: 'out-1',  sourceHandle: 'out' },
+      ],
+    },
   },
 
   // ── 5. Uneven Split ──────────────────────────────────────────────────────
@@ -125,6 +172,21 @@ export const levels: LevelDef[] = [
       'Split 60 → 30 + 30. Split one of the 30s → 15 + 15. Merge one 30 with one 15 to get 45.',
       'S1: 60 → [30 → Merger, 30 → S2].  S2: 30 → [15 → Merger, 15 → out-2].  Merger → 45 → out-1.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 220, y: 180 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 380, y: 240 } },
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 460, y: 140 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-s1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-m1', sourceHandle: 'out-0', targetHandle: 'in-0' },
+        { source: 'sol-s1', target: 'sol-s2', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s2', target: 'sol-m1', sourceHandle: 'out-0', targetHandle: 'in-1' },
+        { source: 'sol-s2', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-m1', target: 'out-1',  sourceHandle: 'out' },
+      ],
+    },
   },
 
   // ── 6. Consolidate ───────────────────────────────────────────────────────
@@ -150,6 +212,20 @@ export const levels: LevelDef[] = [
       'Merge the two 120/min belts first. What does 120 + 120 give you, and can that be split evenly?',
       'Merger(120+120=240) → Splitter(÷3) → [80, 80, 80].',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 220, y: 190 } },
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 380, y: 200 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-m1', targetHandle: 'in-0' },
+        { source: 'in-2',   target: 'sol-m1', targetHandle: 'in-1' },
+        { source: 'sol-m1', target: 'sol-s1', sourceHandle: 'out',   targetHandle: 'in' },
+        { source: 'sol-s1', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s1', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s1', target: 'out-3',  sourceHandle: 'out-2' },
+      ],
+    },
   },
 
   // ── 7. Five Ways ─────────────────────────────────────────────────────────
@@ -176,6 +252,26 @@ export const levels: LevelDef[] = [
       'What if one output wire looped back as a second input to the Merger? The system would self-balance.',
       'Merger(300 + loopback 60) → Splitter(÷2) → two Splitters(each ÷3) → 6 outputs of 60. Wire one back, keep five. Internal flow: 360/min.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 220, y: 260 } },
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 340, y: 260 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 460, y: 80  } },
+        { id: 'sol-s3', type: 'splitterNode', position: { x: 460, y: 440 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-m1', targetHandle: 'in-0' },
+        { source: 'sol-s3', target: 'sol-m1', sourceHandle: 'out-2', targetHandle: 'in-1' },
+        { source: 'sol-m1', target: 'sol-s1', sourceHandle: 'out',   targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s2', sourceHandle: 'out-0', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s3', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s2', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s2', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s2', target: 'out-3',  sourceHandle: 'out-2' },
+        { source: 'sol-s3', target: 'out-4',  sourceHandle: 'out-0' },
+        { source: 'sol-s3', target: 'out-5',  sourceHandle: 'out-1' },
+      ],
+    },
   },
 
   // ── 8. Six Pack ──────────────────────────────────────────────────────────
@@ -202,6 +298,26 @@ export const levels: LevelDef[] = [
       '360 ÷ 3 = 120. Three belts at 120/min — now split each one in half.',
       'Splitter(÷3) → [120, 120, 120] → three Splitters(each ÷2) → six 60s.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 220, y: 280 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 380, y: 80  } },
+        { id: 'sol-s3', type: 'splitterNode', position: { x: 380, y: 280 } },
+        { id: 'sol-s4', type: 'splitterNode', position: { x: 380, y: 480 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-s1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s2', sourceHandle: 'out-0', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s3', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s4', sourceHandle: 'out-2', targetHandle: 'in' },
+        { source: 'sol-s2', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s2', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s3', target: 'out-3',  sourceHandle: 'out-0' },
+        { source: 'sol-s3', target: 'out-4',  sourceHandle: 'out-1' },
+        { source: 'sol-s4', target: 'out-5',  sourceHandle: 'out-0' },
+        { source: 'sol-s4', target: 'out-6',  sourceHandle: 'out-1' },
+      ],
+    },
   },
 
   // ── 9. Pool Party ────────────────────────────────────────────────────────
@@ -229,6 +345,24 @@ export const levels: LevelDef[] = [
       'Feed three inputs into one Merger, then merge that result with the fourth belt.',
       'Merger1(120+120+120=360) → Merger2(360+120=480) → Splitter(÷3) → [160, 160, 160].',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 230, y: 160 } },
+        { id: 'sol-m2', type: 'mergerNode',   position: { x: 380, y: 240 } },
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 520, y: 240 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-m1', targetHandle: 'in-0' },
+        { source: 'in-2',   target: 'sol-m1', targetHandle: 'in-1' },
+        { source: 'in-3',   target: 'sol-m1', targetHandle: 'in-2' },
+        { source: 'sol-m1', target: 'sol-m2', sourceHandle: 'out',   targetHandle: 'in-0' },
+        { source: 'in-4',   target: 'sol-m2', targetHandle: 'in-1' },
+        { source: 'sol-m2', target: 'sol-s1', sourceHandle: 'out',   targetHandle: 'in' },
+        { source: 'sol-s1', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s1', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s1', target: 'out-3',  sourceHandle: 'out-2' },
+      ],
+    },
   },
 
   // ── 10. Cascade ──────────────────────────────────────────────────────────
@@ -253,6 +387,22 @@ export const levels: LevelDef[] = [
       'Split 360 in half. Keep one half as an output. Then split the other half into thirds and recombine two of them.',
       'Splitter(÷2) → [180, 180]. Keep one 180. Splitter(180÷3) → [60, 60, 60]. Merger(60+60=120). Keep one 60.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 220, y: 200 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 360, y: 280 } },
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 480, y: 280 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-s1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s1', target: 'sol-s2', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s2', target: 'out-3',  sourceHandle: 'out-0' },
+        { source: 'sol-s2', target: 'sol-m1', sourceHandle: 'out-1', targetHandle: 'in-0' },
+        { source: 'sol-s2', target: 'sol-m1', sourceHandle: 'out-2', targetHandle: 'in-1' },
+        { source: 'sol-m1', target: 'out-2',  sourceHandle: 'out' },
+      ],
+    },
   },
 
   // ── 11. Imbalance ────────────────────────────────────────────────────────
@@ -278,6 +428,20 @@ export const levels: LevelDef[] = [
       'What if you combined both inputs first? 480 + 240 = ?',
       'Merger(480+240=720) → Splitter(÷3) → [240, 240, 240].',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 220, y: 200 } },
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 380, y: 200 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-m1', targetHandle: 'in-0' },
+        { source: 'in-2',   target: 'sol-m1', targetHandle: 'in-1' },
+        { source: 'sol-m1', target: 'sol-s1', sourceHandle: 'out',   targetHandle: 'in' },
+        { source: 'sol-s1', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s1', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s1', target: 'out-3',  sourceHandle: 'out-2' },
+      ],
+    },
   },
 
   // ── 12. Seven Ways ───────────────────────────────────────────────────────
@@ -306,6 +470,31 @@ export const levels: LevelDef[] = [
       'To get 9 equal streams, use one 3-way split then three more 3-way splits. Two of the nine loop back — filling all three Merger input ports.',
       'Merger(420+60+60=540) → Splitter(÷3) → three Splitters(each ÷3) → 9×60. Wire two back to the Merger\'s remaining input ports. Send seven out.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 180, y: 340 } },
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 320, y: 340 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 460, y: 80  } },
+        { id: 'sol-s3', type: 'splitterNode', position: { x: 460, y: 340 } },
+        { id: 'sol-s4', type: 'splitterNode', position: { x: 460, y: 600 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-m1', targetHandle: 'in-0' },
+        { source: 'sol-s3', target: 'sol-m1', sourceHandle: 'out-2', targetHandle: 'in-1' },
+        { source: 'sol-s4', target: 'sol-m1', sourceHandle: 'out-2', targetHandle: 'in-2' },
+        { source: 'sol-m1', target: 'sol-s1', sourceHandle: 'out',   targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s2', sourceHandle: 'out-0', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s3', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s4', sourceHandle: 'out-2', targetHandle: 'in' },
+        { source: 'sol-s2', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s2', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s2', target: 'out-3',  sourceHandle: 'out-2' },
+        { source: 'sol-s3', target: 'out-4',  sourceHandle: 'out-0' },
+        { source: 'sol-s3', target: 'out-5',  sourceHandle: 'out-1' },
+        { source: 'sol-s4', target: 'out-6',  sourceHandle: 'out-0' },
+        { source: 'sol-s4', target: 'out-7',  sourceHandle: 'out-1' },
+      ],
+    },
   },
 
   // ── 13. Refinement ───────────────────────────────────────────────────────
@@ -331,6 +520,23 @@ export const levels: LevelDef[] = [
       'After keeping one 150 as an output, merge the other two 150s. What can that total be split into?',
       'Splitter(÷3) → [150, 150, 150]. Keep one. Merger(150+150=300) → Splitter(÷3) → [100, 100, 100].',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 240, y: 220 } },
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 400, y: 300 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 520, y: 300 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-s1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s1', target: 'sol-m1', sourceHandle: 'out-1', targetHandle: 'in-0' },
+        { source: 'sol-s1', target: 'sol-m1', sourceHandle: 'out-2', targetHandle: 'in-1' },
+        { source: 'sol-m1', target: 'sol-s2', sourceHandle: 'out',   targetHandle: 'in' },
+        { source: 'sol-s2', target: 'out-2',  sourceHandle: 'out-0' },
+        { source: 'sol-s2', target: 'out-3',  sourceHandle: 'out-1' },
+        { source: 'sol-s2', target: 'out-4',  sourceHandle: 'out-2' },
+      ],
+    },
   },
 
   // ── 14. Full Mix ─────────────────────────────────────────────────────────
@@ -356,6 +562,25 @@ export const levels: LevelDef[] = [
       'Each step produces one output and one remainder to split further: 480→240 and 240→120 and 120→?',
       '÷2→keep 240; ÷2→keep 120; ÷3→merge two 40s→80, keep one 40. Outputs: 240, 120, 80, 40.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 220, y: 220 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 360, y: 300 } },
+        { id: 'sol-s3', type: 'splitterNode', position: { x: 480, y: 360 } },
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 560, y: 420 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-s1', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s1', target: 'sol-s2', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s2', target: 'out-2',  sourceHandle: 'out-0' },
+        { source: 'sol-s2', target: 'sol-s3', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s3', target: 'out-4',  sourceHandle: 'out-0' },
+        { source: 'sol-s3', target: 'sol-m1', sourceHandle: 'out-1', targetHandle: 'in-0' },
+        { source: 'sol-s3', target: 'sol-m1', sourceHandle: 'out-2', targetHandle: 'in-1' },
+        { source: 'sol-m1', target: 'out-3',  sourceHandle: 'out' },
+      ],
+    },
   },
 
   // ── 15. Grand Finale ─────────────────────────────────────────────────────
@@ -385,5 +610,29 @@ export const levels: LevelDef[] = [
       'Once you have 900/min combined, the structure is identical to level 7. Feed it into a second Merger with a loopback.',
       'Merger1(300+300+300=900) → Merger2(900+loopback 180) → Splitter(÷2) → two Splitters(each ÷3) → 6×180. Wire one back, keep five. Internal: 1080/min.',
     ],
+    solution: {
+      nodes: [
+        { id: 'sol-m1', type: 'mergerNode',   position: { x: 180, y: 300 } },
+        { id: 'sol-m2', type: 'mergerNode',   position: { x: 310, y: 300 } },
+        { id: 'sol-s1', type: 'splitterNode', position: { x: 440, y: 300 } },
+        { id: 'sol-s2', type: 'splitterNode', position: { x: 580, y: 120 } },
+        { id: 'sol-s3', type: 'splitterNode', position: { x: 580, y: 480 } },
+      ],
+      edges: [
+        { source: 'in-1',   target: 'sol-m1', targetHandle: 'in-0' },
+        { source: 'in-2',   target: 'sol-m1', targetHandle: 'in-1' },
+        { source: 'in-3',   target: 'sol-m1', targetHandle: 'in-2' },
+        { source: 'sol-m1', target: 'sol-m2', sourceHandle: 'out',   targetHandle: 'in-0' },
+        { source: 'sol-s3', target: 'sol-m2', sourceHandle: 'out-2', targetHandle: 'in-1' },
+        { source: 'sol-m2', target: 'sol-s1', sourceHandle: 'out',   targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s2', sourceHandle: 'out-0', targetHandle: 'in' },
+        { source: 'sol-s1', target: 'sol-s3', sourceHandle: 'out-1', targetHandle: 'in' },
+        { source: 'sol-s2', target: 'out-1',  sourceHandle: 'out-0' },
+        { source: 'sol-s2', target: 'out-2',  sourceHandle: 'out-1' },
+        { source: 'sol-s2', target: 'out-3',  sourceHandle: 'out-2' },
+        { source: 'sol-s3', target: 'out-4',  sourceHandle: 'out-0' },
+        { source: 'sol-s3', target: 'out-5',  sourceHandle: 'out-1' },
+      ],
+    },
   },
 ]

@@ -59,10 +59,12 @@ function HintSection({
   hints,
   hintsRevealed,
   onReveal,
+  onShowSolution,
 }: {
   hints: [string, string, string]
   hintsRevealed: number
   onReveal: () => void
+  onShowSolution: () => void
 }) {
   return (
     <div className="p-3 space-y-2">
@@ -84,9 +86,13 @@ function HintSection({
           {hintsRevealed === 0 ? '? Show hint' : `+ More specific (${hintsRevealed}/3)`}
         </button>
       ) : (
-        <div className="text-[10px] font-mono text-slate-600 text-center">
-          All hints revealed (3/3)
-        </div>
+        <button
+          onClick={onShowSolution}
+          className="w-full text-[11px] font-mono text-slate-600 border border-slate-700/50 rounded py-1.5 hover:bg-red-950/30 hover:border-red-700/40 hover:text-red-400 transition-colors"
+          title="Replaces your current canvas with the reference solution"
+        >
+          Show solution
+        </button>
       )}
     </div>
   )
@@ -109,6 +115,7 @@ export default function App() {
     validate,
     resetGraph,
     loadLevel,
+    loadSolution,
     dismissWin,
     revealHint,
     undo,
@@ -347,6 +354,7 @@ export default function App() {
                 hints={currentLevel.hints}
                 hintsRevealed={hintsRevealed}
                 onReveal={revealHint}
+                onShowSolution={loadSolution}
               />
             </>
           )}
