@@ -3,6 +3,7 @@ import Canvas from './components/Canvas'
 import WinModal from './components/WinModal'
 import Tutorial from './components/Tutorial'
 import Codex from './components/Codex'
+import BlueprintPanel from './components/BlueprintPanel'
 import { useGameStore } from './store/gameStore'
 import { levels } from './levels/levels'
 
@@ -112,6 +113,7 @@ export default function App() {
     showWinModal,
     hintsRevealed,
     history,
+    blueprints,
     validate,
     resetGraph,
     loadLevel,
@@ -120,6 +122,9 @@ export default function App() {
     revealHint,
     undo,
     deleteSelected,
+    saveBlueprint,
+    deleteBlueprint,
+    stampBlueprint,
   } = useGameStore()
 
   const currentLevel = levels.find((l) => l.id === currentLevelId)
@@ -128,6 +133,7 @@ export default function App() {
   const mergerCount   = nodes.filter((n) => n.type === 'mergerNode').length
   const splitterLeft  = nodeBudget.splitters - splitterCount
   const mergerLeft    = nodeBudget.mergers   - mergerCount
+  const smSelected    = nodes.some((n) => n.selected && (n.type === 'splitterNode' || n.type === 'mergerNode'))
 
   function handleNext() {
     const nextId = currentLevelId + 1
@@ -358,6 +364,19 @@ export default function App() {
               />
             </>
           )}
+
+          {/* Blueprint panel */}
+          <div className="border-t border-slate-800">
+            <BlueprintPanel
+              blueprints={blueprints}
+              splitterLeft={splitterLeft}
+              mergerLeft={mergerLeft}
+              hasSelection={smSelected}
+              onSave={saveBlueprint}
+              onStamp={stampBlueprint}
+              onDelete={deleteBlueprint}
+            />
+          </div>
 
         </aside>
       </div>

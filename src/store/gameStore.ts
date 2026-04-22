@@ -20,6 +20,9 @@ import type {
   FlowResult,
   LevelDef,
   SolutionDef,
+  Blueprint,
+  BlueprintNode,
+  BlueprintEdge,
 } from '../types'
 import type { Rotation } from '../utils/rotation'
 import { solveFlow } from '../solver/solveFlow'
@@ -29,6 +32,7 @@ import { levels } from '../levels/levels'
 
 const PROGRESS_KEY   = 'belt-balancer-progress'
 const TUTORIAL_KEY   = 'belt-balancer-tutorial-v1'
+const BLUEPRINTS_KEY = 'belt-balancer-blueprints'
 const canvasKey = (id: number) => `belt-balancer-canvas-${id}`
 
 function loadProgress(): number[] {
@@ -44,6 +48,14 @@ function loadTutorialDone(): boolean {
 }
 function saveTutorialDone(): void {
   try { localStorage.setItem(TUTORIAL_KEY, '1') } catch { /* noop */ }
+}
+
+function loadBlueprints(): Blueprint[] {
+  try { return JSON.parse(localStorage.getItem(BLUEPRINTS_KEY) ?? '[]') as Blueprint[] }
+  catch { return [] }
+}
+function saveBlueprints(bps: Blueprint[]): void {
+  try { localStorage.setItem(BLUEPRINTS_KEY, JSON.stringify(bps)) } catch { /* noop */ }
 }
 
 interface CanvasSnapshot { nodes: Node[]; edges: Edge[] }
@@ -177,6 +189,8 @@ interface GameState {
   hintsRevealed: number
   tutorialStep: 0 | 1 | 2 | null
 
+  blueprints: Blueprint[]
+
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
@@ -193,6 +207,10 @@ interface GameState {
   revealHint: () => void
   advanceTutorial: () => void
   dismissTutorial: () => void
+
+  saveBlueprint: (name: string) => void
+  deleteBlueprint: (id: string) => void
+  stampBlueprint: (id: string) => void
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────
@@ -218,6 +236,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   showWinModal: false,
   hintsRevealed: 0,
   tutorialStep: loadTutorialDone() ? null : 0,
+
+  blueprints: loadBlueprints(),
 
   // ── Canvas mutations ─────────────────────────────────────────────────────
 
@@ -404,4 +424,105 @@ export const useGameStore = create<GameState>((set, get) => ({
     saveTutorialDone()
     set({ tutorialStep: null })
   },
+
+  // ── Blueprints ────────────────────────────────────────────────────────────
+
+  saveBlueprint: (name) => {
+    const { nodes, edges, blueprints } = get()
+
+    // Only save selected splitters/mergers
+    const selected = nodes.filter(
+      (n) => n.selected && (n.type === 'splitterNode' || n.type === 'mergerNode'),
+    )
+    if (selected.length === 0) return
+
+    const selectedIds = new Set(selected.map((n) => n.id))
+    const cx = selected.reduce((s, n) => s + n.position.x, 0) / selected.length
+    const cy = selected.reduce((s, n) => s + n.position.y, 0) / selected.length
+
+    const bpNodes: BlueprintNode[] = selected.map((n) => ({
+      bpId: n.id,
+      type: n.type as 'splitterNode' | 'mergerNode',
+      relX: n.position.x - cx,
+      relY: n.position.y - cy,
+    }))
+
+    const bpEdges: BlueprintEdge[] = edges
+      .filter((e) => selectedIds.has(e.source) && selectedIds.has(e.target))
+      .map((e) => ({
+        sourceBpId: e.source,
+        targetBpId: e.target,
+        ...(e.sourceHandle != null ? { sourceHandle: e.sourceHandle } : {}),
+        ...(e.targetHandle != null ? { targetHandle: e.targetHandle } : {}),
+      }))
+
+    const bp: Blueprint = {
+      id: `bp-${Date.now()}`,
+      name: name.trim() || 'Blueprint',
+      nodes: bpNodes,
+      edges: bpEdges,
+      splitterCount: bpNodes.filter((n) => n.type === 'splitterNode').length,
+      mergerCount:   bpNodes.filter((n) => n.type === 'mergerNode').length,
+      createdAt: Date.now(),
+    }
+
+    const updated = [...blueprints, bp]
+    saveBlueprints(updated)
+    set({ blueprints: updated })
+  },
+
+  deleteBlueprint: (id) => {
+    const updated = get().blueprints.filter((b) => b.id !== id)
+    saveBlueprints(updated)
+    set({ blueprints: updated })
+  },
+
+  stampBlueprint: (id) =>
+    set((s) => {
+      const bp = s.blueprints.find((b) => b.id === id)
+      if (!bp) return {}
+
+      // Place near the existing intermediate nodes' centroid, or a sensible default
+      const intermediates = s.nodes.filter(
+        (n) => n.type === 'splitterNode' || n.type === 'mergerNode',
+      )
+      const baseX = intermediates.length
+        ? intermediates.reduce((sum, n) => sum + n.position.x, 0) / intermediates.length + 100
+        : 280
+      const baseY = intermediates.length
+        ? intermediates.reduce((sum, n) => sum + n.position.y, 0) / intermediates.length
+        : 180
+
+      const prefix = `stamp-${Date.now()}`
+      const idMap = new Map(bp.nodes.map((n) => [n.bpId, `${prefix}-${n.bpId}`]))
+
+      const newNodes: Node[] = bp.nodes.map((n) => ({
+        id: idMap.get(n.bpId)!,
+        type: n.type,
+        position: { x: baseX + n.relX, y: baseY + n.relY },
+        deletable: true,
+        selected: true,
+        data: (n.type === 'splitterNode'
+          ? { kind: 'splitter', rotation: 0 } satisfies SplitterNodeData
+          : { kind: 'merger',   rotation: 0 } satisfies MergerNodeData),
+      }))
+
+      const newEdges: Edge[] = bp.edges.map((e, i) => ({
+        id: `${prefix}-e${i}`,
+        source: idMap.get(e.sourceBpId)!,
+        target: idMap.get(e.targetBpId)!,
+        ...(e.sourceHandle != null ? { sourceHandle: e.sourceHandle } : {}),
+        ...(e.targetHandle != null ? { targetHandle: e.targetHandle } : {}),
+        animated: true,
+        style: { stroke: '#f59e0b', strokeWidth: 2 },
+      }))
+
+      // Deselect existing nodes so the newly stamped ones stand out
+      const history = pushHistory(s.history, s.nodes, s.edges)
+      const allNodes = [...s.nodes.map((n) => ({ ...n, selected: false })), ...newNodes]
+      const allEdges = [...s.edges, ...newEdges]
+      const { nodes, edges, flowResult } = runSolverAndStamp(allNodes, allEdges)
+      saveCanvas(s.currentLevelId, nodes, edges)
+      return { nodes, edges, flowResult, history }
+    }),
 }))
