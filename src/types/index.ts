@@ -110,6 +110,35 @@ export interface SolutionDef {
   edges: SolutionEdge[];
 }
 
+// ── Blueprint (player-saved sub-graphs) ────────────────────────────────────
+
+/** One node inside a saved blueprint, with position relative to the group centroid. */
+export interface BlueprintNode {
+  bpId: string;
+  type: 'splitterNode' | 'mergerNode';
+  relX: number;
+  relY: number;
+}
+
+/** An internal edge saved inside a blueprint (both endpoints are blueprint nodes). */
+export interface BlueprintEdge {
+  sourceBpId: string;
+  targetBpId: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+}
+
+/** A named, reusable sub-graph saved by the player. */
+export interface Blueprint {
+  id: string;
+  name: string;
+  nodes: BlueprintNode[];
+  edges: BlueprintEdge[];
+  splitterCount: number;
+  mergerCount: number;
+  createdAt: number;
+}
+
 export interface LevelDef {
   id: number;
   title: string;
