@@ -19,6 +19,7 @@ import type {
   Graph,
   FlowResult,
   LevelDef,
+  SolutionDef,
 } from '../types'
 import type { Rotation } from '../utils/rotation'
 import { solveFlow } from '../solver/solveFlow'
@@ -187,6 +188,7 @@ interface GameState {
   resetGraph: () => void
 
   loadLevel: (levelId: number) => void
+  loadSolution: () => void
   dismissWin: () => void
   revealHint: () => void
   advanceTutorial: () => void
@@ -334,6 +336,55 @@ export const useGameStore = create<GameState>((set, get) => ({
     const saved = loadCanvas(levelId)
     const { nodes, edges, flowResult } = runSolverAndStamp(saved?.nodes ?? nodesFromLevel(level), saved?.edges ?? [])
     set({ currentLevelId: levelId, nodes, edges, flowResult, nodeBudget: level.nodeBudget, history: [], showWinModal: false, hintsRevealed: 0 })
+  },
+
+  loadSolution: () => {
+    const { currentLevelId } = get()
+    const level = levels.find((l) => l.id === currentLevelId)
+    if (!level) return
+    const sol: SolutionDef = level.solution
+
+    // Fixed I/O nodes from the level definition
+    const ioNodes = nodesFromLevel(level)
+
+    // Intermediate nodes (splitters / mergers) specified by the solution
+    const intermediateNodes: Node[] = sol.nodes.map((sn) => ({
+      id: sn.id,
+      type: sn.type,
+      position: sn.position,
+      deletable: true,
+      data: (sn.type === 'splitterNode'
+        ? { kind: 'splitter', rotation: 0 } satisfies SplitterNodeData
+        : { kind: 'merger',   rotation: 0 } satisfies MergerNodeData),
+    }))
+
+    // Edges with the same visual style as user-drawn edges
+    const solutionEdges: Edge[] = sol.edges.map((se, i) => ({
+      id: `sol-e${i}`,
+      source: se.source,
+      target: se.target,
+      ...(se.sourceHandle != null ? { sourceHandle: se.sourceHandle } : {}),
+      ...(se.targetHandle != null ? { targetHandle: se.targetHandle } : {}),
+      animated: true,
+      style: { stroke: '#f59e0b', strokeWidth: 2 },
+    }))
+
+    const allNodes = [...ioNodes, ...intermediateNodes]
+    const { nodes, edges, flowResult } = runSolverAndStamp(allNodes, solutionEdges)
+    saveCanvas(currentLevelId, nodes, edges)
+
+    // Mark level complete
+    let { completedLevelIds, tutorialStep } = get()
+    if (!completedLevelIds.includes(currentLevelId)) {
+      completedLevelIds = [...completedLevelIds, currentLevelId]
+      saveProgress(completedLevelIds)
+    }
+    if (currentLevelId === 1 && tutorialStep !== null) {
+      saveTutorialDone()
+      tutorialStep = null
+    }
+
+    set({ nodes, edges, flowResult, history: [], completedLevelIds, tutorialStep, showWinModal: flowResult.satisfied })
   },
 
   dismissWin: () => set({ showWinModal: false }),

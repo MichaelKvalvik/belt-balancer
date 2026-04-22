@@ -89,6 +89,27 @@ export interface LevelOutput {
   position: { x: number; y: number };
 }
 
+/** A single intermediate node (splitter or merger) in a reference solution. */
+export interface SolutionNode {
+  id: string;
+  type: 'splitterNode' | 'mergerNode';
+  position: { x: number; y: number };
+}
+
+/** An edge in a reference solution. Uses the same handle IDs as the live canvas. */
+export interface SolutionEdge {
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+}
+
+/** A complete reference solution graph for one level. */
+export interface SolutionDef {
+  nodes: SolutionNode[];
+  edges: SolutionEdge[];
+}
+
 export interface LevelDef {
   id: number;
   title: string;
@@ -101,4 +122,6 @@ export interface LevelDef {
   };
   /** Exactly three progressive hints, from vague to specific. */
   hints: [string, string, string];
+  /** Reference solution loaded onto the canvas when the player gives up. */
+  solution: SolutionDef;
 }
