@@ -170,3 +170,34 @@ export interface LevelDef {
   /** Reference solution loaded onto the canvas when the player gives up. */
   solution: SolutionDef;
 }
+
+// ── Tutorial chapters ──────────────────────────────────────────────────────
+
+/** One scripted action in a chapter demo. */
+export interface DemoStep {
+  action:
+    | { type: 'placeNode'; nodeType: 'inputNode' | 'outputNode' | 'splitterNode' | 'mergerNode'; id: string; position: { x: number; y: number }; rate?: number; targetRate?: number }
+    | { type: 'drawEdge'; source: string; target: string; sourceHandle?: string; targetHandle?: string; id: string; mark?: BeltMark }
+    | { type: 'setBeltMark'; edgeId: string; mark: BeltMark }
+    | { type: 'pause' };
+  narration: string;
+  highlightKey?: string;
+  durationMs?: number;
+}
+
+/** The try-it-yourself puzzle at the end of each chapter demo. */
+export interface TryItPuzzle {
+  inputs: LevelInput[];
+  outputs: LevelOutput[];
+  nodeBudget: { splitters: number; mergers: number };
+  solution: SolutionDef;
+}
+
+/** One tutorial chapter. */
+export interface ChapterDef {
+  id: number;
+  title: string;
+  concept: string;
+  demoSteps: DemoStep[];
+  tryItPuzzle: TryItPuzzle;
+}

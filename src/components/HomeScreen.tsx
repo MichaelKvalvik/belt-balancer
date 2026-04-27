@@ -1,5 +1,5 @@
 import { useGameStore } from '../store/gameStore'
-import { levels } from '../levels/levels'
+import { chapters } from '../tutorial/chapters'
 
 interface ModeCardProps {
   title: string
@@ -49,10 +49,10 @@ function ModeCard({ title, description, badge, progress, disabled, onClick }: Mo
 
 export default function HomeScreen() {
   const setMode = useGameStore((s) => s.setMode)
-  const completedLevelIds = useGameStore((s) => s.completedLevelIds)
+  const completedChapters = useGameStore((s) => s.completedChapters)
 
-  const totalChapters = levels.length
-  const completedCount = completedLevelIds.length
+  const totalChapters = chapters.length
+  const completedCount = completedChapters.length
   const progressLabel = `${completedCount} of ${totalChapters} chapters complete`
 
   return (

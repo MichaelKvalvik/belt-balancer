@@ -24,16 +24,19 @@ import type {
   BlueprintNode,
   BlueprintEdge,
   BeltMark,
+  DemoStep,
 } from '../types'
 import type { Rotation } from '../utils/rotation'
 import { solveFlow } from '../solver/solveFlow'
 import { levels } from '../levels/levels'
+import { chapters } from '../tutorial/chapters'
 import { BELT_STROKE } from '../components/BeltSelectorBar'
 
 // ── localStorage helpers ───────────────────────────────────────────────────
 
 const PROGRESS_KEY   = 'belt-balancer-progress'
 const TUTORIAL_KEY   = 'belt-balancer-tutorial-v1'
+const CHAPTERS_KEY   = 'belt-balancer-tutorial-chapters'
 const BLUEPRINTS_KEY = 'belt-balancer-blueprints'
 const canvasKey = (id: number) => `belt-balancer-canvas-${id}`
 
@@ -52,6 +55,14 @@ function saveTutorialDone(): void {
   try { localStorage.setItem(TUTORIAL_KEY, '1') } catch { /* noop */ }
 }
 
+function loadCompletedChapters(): number[] {
+  try { return JSON.parse(localStorage.getItem(CHAPTERS_KEY) ?? '[]') as number[] }
+  catch { return [] }
+}
+function saveCompletedChapters(ids: number[]): void {
+  try { localStorage.setItem(CHAPTERS_KEY, JSON.stringify(ids)) } catch { /* noop */ }
+}
+
 function loadBlueprints(): Blueprint[] {
   try { return JSON.parse(localStorage.getItem(BLUEPRINTS_KEY) ?? '[]') as Blueprint[] }
   catch { return [] }
@@ -63,6 +74,11 @@ function saveBlueprints(bps: Blueprint[]): void {
 interface CanvasSnapshot { nodes: Node[]; edges: Edge[] }
 function saveCanvas(levelId: number, nodes: Node[], edges: Edge[]): void {
   try { localStorage.setItem(canvasKey(levelId), JSON.stringify({ nodes, edges })) } catch { /* noop */ }
+}
+/** Persist canvas only when not in a tutorial-chapter try-it (which is ephemeral). */
+function persistCanvasIfPersistable(s: { currentChapterId: number | null; mode: string; currentLevelId: number }, nodes: Node[], edges: Edge[]): void {
+  if (s.mode === 'tutorial' && s.currentChapterId != null) return
+  saveCanvas(s.currentLevelId, nodes, edges)
 }
 function loadCanvas(levelId: number): CanvasSnapshot | null {
   try {
@@ -98,6 +114,64 @@ function buildGraph(nodes: Node[], edges: Edge[]): Graph {
     nodes: nodes.map((n) => ({ id: n.id, kind: nodeTypeToKind(n.type), data: n.data as GameNodeData })),
     edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle, data: e.data as { mark?: BeltMark } | undefined })),
   }
+}
+
+function nodesFromPuzzle(puzzle: { inputs: LevelDef['inputs']; outputs: LevelDef['outputs'] }): Node[] {
+  return [
+    ...puzzle.inputs.map((inp) => ({
+      id: inp.id, type: 'inputNode', position: inp.position, deletable: false,
+      data: { kind: 'input', rate: inp.rate } satisfies InputNodeData,
+    })),
+    ...puzzle.outputs.map((out) => ({
+      id: out.id, type: 'outputNode', position: out.position, deletable: false,
+      data: { kind: 'output', targetRate: out.targetRate } satisfies OutputNodeData,
+    })),
+  ]
+}
+
+/** Apply a single DemoStep to demo nodes/edges (presentational, no solver). */
+function applyDemoStepToCanvas(step: DemoStep, nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[] } {
+  const a = step.action
+  if (a.type === 'placeNode') {
+    let data: GameNodeData
+    if (a.nodeType === 'inputNode')        data = { kind: 'input',  rate: a.rate ?? 0 }
+    else if (a.nodeType === 'outputNode')  data = { kind: 'output', targetRate: a.targetRate ?? 0 }
+    else if (a.nodeType === 'splitterNode') data = { kind: 'splitter', rotation: 0 }
+    else                                    data = { kind: 'merger',   rotation: 0 }
+    const newNode: Node = {
+      id: a.id,
+      type: a.nodeType,
+      position: a.position,
+      deletable: false,
+      draggable: false,
+      selectable: false,
+      data,
+    }
+    return { nodes: [...nodes, newNode], edges }
+  }
+  if (a.type === 'drawEdge') {
+    const mark: BeltMark = a.mark ?? 1
+    const newEdge: Edge = {
+      id: a.id,
+      source: a.source,
+      target: a.target,
+      ...(a.sourceHandle ? { sourceHandle: a.sourceHandle } : {}),
+      ...(a.targetHandle ? { targetHandle: a.targetHandle } : {}),
+      animated: true,
+      style: { stroke: BELT_STROKE[mark], strokeWidth: 2 },
+      data: { mark },
+    }
+    return { nodes, edges: [...edges, newEdge] }
+  }
+  if (a.type === 'setBeltMark') {
+    const newEdges = edges.map((e) =>
+      e.id === a.edgeId
+        ? { ...e, data: { ...(e.data ?? {}), mark: a.mark }, style: { ...(e.style ?? {}), stroke: BELT_STROKE[a.mark] } }
+        : e,
+    )
+    return { nodes, edges: newEdges }
+  }
+  return { nodes, edges }
 }
 
 function nodesFromLevel(level: LevelDef): Node[] {
@@ -212,6 +286,18 @@ interface GameState {
   hintsRevealed: number
   tutorialStep: 0 | 1 | 2 | null
 
+  // Tutorial chapter state
+  unlockedChapters: number[]
+  completedChapters: number[]
+  currentChapterId: number | null
+
+  // Demo playback state
+  demoPlaying: boolean
+  demoPaused: boolean
+  demoStepIndex: number
+  demoNodes: Node[]
+  demoEdges: Edge[]
+
   blueprints: Blueprint[]
 
   selectedMark: BeltMark
@@ -236,6 +322,18 @@ interface GameState {
   revealHint: () => void
   advanceTutorial: () => void
   dismissTutorial: () => void
+
+  // Tutorial chapter actions
+  openChapter: (id: number) => void
+  closeChapter: () => void
+  completeChapterTryIt: (id: number) => void
+  startDemo: () => void
+  pauseDemo: () => void
+  resumeDemo: () => void
+  stepDemo: () => void
+  replayDemo: () => void
+  skipDemo: () => void
+  loadChapterSolution: () => void
 
   saveBlueprint: (name: string) => void
   deleteBlueprint: (id: string) => void
@@ -268,6 +366,24 @@ export const useGameStore = create<GameState>((set, get) => ({
   hintsRevealed: 0,
   tutorialStep: loadTutorialDone() ? null : 0,
 
+  unlockedChapters: (() => {
+    const completed = loadCompletedChapters()
+    const unlocked = new Set<number>([1])
+    for (const id of completed) {
+      unlocked.add(id)
+      unlocked.add(id + 1)
+    }
+    return Array.from(unlocked).filter((id) => id >= 1 && id <= chapters.length).sort((a, b) => a - b)
+  })(),
+  completedChapters: loadCompletedChapters(),
+  currentChapterId: null,
+
+  demoPlaying: false,
+  demoPaused: false,
+  demoStepIndex: 0,
+  demoNodes: [],
+  demoEdges: [],
+
   blueprints: loadBlueprints(),
 
   selectedMark: 1,
@@ -275,7 +391,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   setMode: (mode) => {
     set({ mode })
     if (mode === 'tutorial') {
-      get().loadLevel(1)
+      // Tutorial mode shows the chapter list; canvas/demo are wiped until a chapter is opened
+      set({
+        nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
+        currentChapterId: null,
+        demoPlaying: false, demoPaused: false, demoStepIndex: 0, demoNodes: [], demoEdges: [],
+      })
     } else if (mode === 'puzzles' || mode === 'free') {
       set({ nodes: [], edges: [], flowResult: null, history: [], showWinModal: false })
     }
@@ -286,16 +407,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   onNodesChange: (changes) =>
     set((s) => {
       const { nodes, edges, flowResult } = runSolverAndStamp(applyNodeChanges(changes, s.nodes), s.edges)
-      saveCanvas(s.currentLevelId, nodes, edges)
-      const win = checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+      persistCanvasIfPersistable(s, nodes, edges)
+      const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
+      const win = inChapter
+        ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
+        : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, ...win }
     }),
 
   onEdgesChange: (changes) =>
     set((s) => {
       const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, applyEdgeChanges(changes, s.edges))
-      saveCanvas(s.currentLevelId, nodes, edges)
-      const win = checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+      persistCanvasIfPersistable(s, nodes, edges)
+      const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
+      const win = inChapter
+        ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
+        : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, ...win }
     }),
 
@@ -304,13 +431,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       const history = pushHistory(s.history, s.nodes, s.edges)
       const newEdges = addEdge({ ...connection, animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 }, data: { mark: get().selectedMark } }, s.edges)
       const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
-      saveCanvas(s.currentLevelId, nodes, edges)
-      const win = checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+      persistCanvasIfPersistable(s, nodes, edges)
+      const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
+      const win = inChapter
+        ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
+        : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, history, ...win }
     }),
 
   addNode: (type, position) => {
-    const { nodes, edges, nodeBudget, currentLevelId } = get()
+    const { nodes, nodeBudget } = get()
     const splitters = nodes.filter((n) => n.type === 'splitterNode').length
     const mergers   = nodes.filter((n) => n.type === 'mergerNode').length
     if (type === 'splitterNode' && splitters >= nodeBudget.splitters) return
@@ -324,8 +454,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     set((s) => {
       const history = pushHistory(s.history, s.nodes, s.edges)
-      const { nodes: n, edges: e, flowResult } = runSolverAndStamp([...s.nodes, newNode], edges)
-      saveCanvas(currentLevelId, n, e)
+      const { nodes: n, edges: e, flowResult } = runSolverAndStamp([...s.nodes, newNode], s.edges)
+      persistCanvasIfPersistable(s, n, e)
       return { nodes: n, edges: e, flowResult, history }
     })
   },
@@ -337,7 +467,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const keptIds = new Set(kept.map((n) => n.id))
       const keptEdges = s.edges.filter((e) => !e.selected && keptIds.has(e.source) && keptIds.has(e.target))
       const { nodes, edges, flowResult } = runSolverAndStamp(kept, keptEdges)
-      saveCanvas(s.currentLevelId, nodes, edges)
+      persistCanvasIfPersistable(s, nodes, edges)
       return { nodes, edges, flowResult, history }
     }),
 
@@ -346,7 +476,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const history = pushHistory(s.history, s.nodes, s.edges)
       const newNodes = s.nodes.map((n) => n.id === id ? { ...n, data: { ...n.data, rotation } } : n)
       const { nodes, edges, flowResult } = runSolverAndStamp(newNodes, s.edges)
-      saveCanvas(s.currentLevelId, nodes, edges)
+      persistCanvasIfPersistable(s, nodes, edges)
       return { nodes, edges, flowResult, history }
     }),
 
@@ -359,8 +489,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         e.id === edgeId ? { ...e, data: { ...(e.data ?? {}), mark } } : e,
       )
       const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
-      saveCanvas(s.currentLevelId, nodes, edges)
-      const win = checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+      persistCanvasIfPersistable(s, nodes, edges)
+      const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
+      const win = inChapter
+        ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
+        : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, history, ...win }
     }),
 
@@ -370,7 +503,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const prev = s.history[s.history.length - 1]
       const history = s.history.slice(0, -1)
       const { nodes, edges, flowResult } = runSolverAndStamp(prev.nodes, prev.edges)
-      saveCanvas(s.currentLevelId, nodes, edges)
+      persistCanvasIfPersistable(s, nodes, edges)
       return { nodes, edges, flowResult, history }
     }),
 
@@ -396,7 +529,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     }),
 
   resetGraph: () => {
-    const { currentLevelId } = get()
+    const { currentLevelId, currentChapterId, mode } = get()
+    if (mode === 'tutorial' && currentChapterId != null) {
+      const ch = chapters.find((c) => c.id === currentChapterId)
+      if (!ch) return
+      const { nodes, edges, flowResult } = runSolverAndStamp(nodesFromPuzzle(ch.tryItPuzzle), [])
+      set({ nodes, edges, flowResult, history: [], showWinModal: false })
+      return
+    }
     const level = levels.find((l) => l.id === currentLevelId)
     if (!level) return
     clearCanvas(currentLevelId)
@@ -479,6 +619,128 @@ export const useGameStore = create<GameState>((set, get) => ({
   dismissTutorial: () => {
     saveTutorialDone()
     set({ tutorialStep: null })
+  },
+
+  // ── Tutorial chapters ────────────────────────────────────────────────────
+
+  openChapter: (id) => {
+    const ch = chapters.find((c) => c.id === id)
+    if (!ch) return
+    const ioNodes = nodesFromPuzzle(ch.tryItPuzzle)
+    const { nodes, edges, flowResult } = runSolverAndStamp(ioNodes, [])
+    set({
+      currentChapterId: id,
+      nodes,
+      edges,
+      flowResult,
+      nodeBudget: ch.tryItPuzzle.nodeBudget,
+      history: [],
+      showWinModal: false,
+      hintsRevealed: 0,
+      demoPlaying: true,
+      demoPaused: false,
+      demoStepIndex: 0,
+      demoNodes: [],
+      demoEdges: [],
+    })
+  },
+
+  closeChapter: () => set({
+    currentChapterId: null,
+    nodes: [], edges: [], flowResult: null, history: [],
+    demoPlaying: false, demoPaused: false, demoStepIndex: 0, demoNodes: [], demoEdges: [],
+  }),
+
+  completeChapterTryIt: (id) =>
+    set((s) => {
+      if (s.completedChapters.includes(id)) return {}
+      const completedChapters = [...s.completedChapters, id]
+      saveCompletedChapters(completedChapters)
+      const unlocked = new Set(s.unlockedChapters)
+      unlocked.add(id)
+      if (id + 1 <= chapters.length) unlocked.add(id + 1)
+      const unlockedChapters = Array.from(unlocked).sort((a, b) => a - b)
+      return { completedChapters, unlockedChapters }
+    }),
+
+  startDemo: () => set({ demoPlaying: true, demoPaused: false, demoStepIndex: 0, demoNodes: [], demoEdges: [] }),
+
+  pauseDemo: () => set({ demoPaused: true }),
+
+  resumeDemo: () => set({ demoPaused: false }),
+
+  stepDemo: () =>
+    set((s) => {
+      if (s.currentChapterId == null) return {}
+      const ch = chapters.find((c) => c.id === s.currentChapterId)
+      if (!ch) return {}
+      if (s.demoStepIndex >= ch.demoSteps.length) {
+        return { demoPlaying: false }
+      }
+      const step = ch.demoSteps[s.demoStepIndex]
+      const next = applyDemoStepToCanvas(step, s.demoNodes, s.demoEdges)
+      const nextIndex = s.demoStepIndex + 1
+      const isLast = nextIndex >= ch.demoSteps.length
+      return {
+        demoNodes: next.nodes,
+        demoEdges: next.edges,
+        demoStepIndex: nextIndex,
+        demoPlaying: isLast ? false : s.demoPlaying,
+      }
+    }),
+
+  replayDemo: () => set({ demoPlaying: true, demoPaused: false, demoStepIndex: 0, demoNodes: [], demoEdges: [] }),
+
+  skipDemo: () =>
+    set((s) => {
+      if (s.currentChapterId == null) return {}
+      const ch = chapters.find((c) => c.id === s.currentChapterId)
+      if (!ch) return {}
+      // Apply all remaining steps so the demo canvas shows the final state, then end.
+      let nodes = s.demoNodes
+      let edges = s.demoEdges
+      for (let i = s.demoStepIndex; i < ch.demoSteps.length; i++) {
+        const r = applyDemoStepToCanvas(ch.demoSteps[i], nodes, edges)
+        nodes = r.nodes
+        edges = r.edges
+      }
+      return {
+        demoNodes: nodes,
+        demoEdges: edges,
+        demoStepIndex: ch.demoSteps.length,
+        demoPlaying: false,
+        demoPaused: false,
+      }
+    }),
+
+  loadChapterSolution: () => {
+    const { currentChapterId } = get()
+    if (currentChapterId == null) return
+    const ch = chapters.find((c) => c.id === currentChapterId)
+    if (!ch) return
+    const sol: SolutionDef = ch.tryItPuzzle.solution
+    const ioNodes = nodesFromPuzzle(ch.tryItPuzzle)
+    const intermediateNodes: Node[] = sol.nodes.map((sn) => ({
+      id: sn.id,
+      type: sn.type,
+      position: sn.position,
+      deletable: true,
+      data: (sn.type === 'splitterNode'
+        ? { kind: 'splitter', rotation: 0 } satisfies SplitterNodeData
+        : { kind: 'merger',   rotation: 0 } satisfies MergerNodeData),
+    }))
+    const solutionEdges: Edge[] = sol.edges.map((se, i) => ({
+      id: `chsol-e${i}`,
+      source: se.source,
+      target: se.target,
+      ...(se.sourceHandle != null ? { sourceHandle: se.sourceHandle } : {}),
+      ...(se.targetHandle != null ? { targetHandle: se.targetHandle } : {}),
+      animated: true,
+      style: { stroke: '#f59e0b', strokeWidth: 2 },
+      data: { mark: 1 as BeltMark },
+    }))
+    const { nodes, edges, flowResult } = runSolverAndStamp([...ioNodes, ...intermediateNodes], solutionEdges)
+    set({ nodes, edges, flowResult, history: [] })
   },
 
   // ── Blueprints ────────────────────────────────────────────────────────────
