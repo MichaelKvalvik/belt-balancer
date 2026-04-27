@@ -23,10 +23,12 @@ import type {
   Blueprint,
   BlueprintNode,
   BlueprintEdge,
+  BeltMark,
 } from '../types'
 import type { Rotation } from '../utils/rotation'
 import { solveFlow } from '../solver/solveFlow'
 import { levels } from '../levels/levels'
+import { BELT_STROKE } from '../components/BeltSelectorBar'
 
 // ── localStorage helpers ───────────────────────────────────────────────────
 
@@ -63,8 +65,17 @@ function saveCanvas(levelId: number, nodes: Node[], edges: Edge[]): void {
   try { localStorage.setItem(canvasKey(levelId), JSON.stringify({ nodes, edges })) } catch { /* noop */ }
 }
 function loadCanvas(levelId: number): CanvasSnapshot | null {
-  try { const raw = localStorage.getItem(canvasKey(levelId)); return raw ? JSON.parse(raw) : null }
-  catch { return null }
+  try {
+    const raw = localStorage.getItem(canvasKey(levelId))
+    if (!raw) return null
+    const snap = JSON.parse(raw) as CanvasSnapshot
+    // Migration: ensure every edge carries data.mark (defaults to Mk.1).
+    snap.edges = (snap.edges ?? []).map((e) => {
+      const existingMark = (e.data as { mark?: BeltMark } | undefined)?.mark
+      return { ...e, data: { ...(e.data ?? {}), mark: existingMark ?? 1 } }
+    })
+    return snap
+  } catch { return null }
 }
 function clearCanvas(levelId: number): void {
   try { localStorage.removeItem(canvasKey(levelId)) } catch { /* noop */ }
@@ -85,7 +96,7 @@ function nodeTypeToKind(type: string | undefined): NodeKind {
 function buildGraph(nodes: Node[], edges: Edge[]): Graph {
   return {
     nodes: nodes.map((n) => ({ id: n.id, kind: nodeTypeToKind(n.type), data: n.data as GameNodeData })),
-    edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle })),
+    edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle, data: e.data as { mark?: BeltMark } | undefined })),
   }
 }
 
@@ -118,14 +129,22 @@ function runSolverAndStamp(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges
   })
   const stampedEdges = edges.map((edge) => {
     const rate = result.edgeRates[edge.id]
-    if (rate === undefined) return edge
-    return {
+    const mark = ((edge.data as { mark?: BeltMark } | undefined)?.mark ?? 1) as BeltMark
+    const overloaded = result.overloadedEdges.has(edge.id)
+    const stroke = overloaded ? '#ef4444' : BELT_STROKE[mark]
+    const strokeWidth = overloaded ? 3 : 2
+    const stamped: Edge = {
       ...edge,
-      label: fmtRate(rate),
-      labelStyle: { fill: '#f59e0b', fontFamily: 'ui-monospace, monospace', fontSize: 11 },
-      labelBgStyle: { fill: '#0f172a', fillOpacity: 0.9 },
-      labelBgPadding: [4, 3] as [number, number],
+      animated: true,
+      style: { ...(edge.style ?? {}), stroke, strokeWidth },
     }
+    if (rate !== undefined) {
+      stamped.label = fmtRate(rate)
+      stamped.labelStyle = { fill: overloaded ? '#fca5a5' : '#f59e0b', fontFamily: 'ui-monospace, monospace', fontSize: 11 }
+      stamped.labelBgStyle = { fill: '#0f172a', fillOpacity: 0.9 }
+      stamped.labelBgPadding = [4, 3] as [number, number]
+    }
+    return stamped
   })
   return { nodes: stampedNodes, edges: stampedEdges, flowResult: result }
 }
@@ -191,12 +210,16 @@ interface GameState {
 
   blueprints: Blueprint[]
 
+  selectedMark: BeltMark
+
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
   addNode: (type: string, position: { x: number; y: number }) => void
   deleteSelected: () => void
   rotateNode: (id: string, rotation: Rotation) => void
+  setSelectedMark: (mark: BeltMark) => void
+  remarkEdge: (edgeId: string, mark: BeltMark) => void
   undo: () => void
   validate: () => void
   resetGraph: () => void
@@ -239,6 +262,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   blueprints: loadBlueprints(),
 
+  selectedMark: 1,
+
   // ── Canvas mutations ─────────────────────────────────────────────────────
 
   onNodesChange: (changes) =>
@@ -260,7 +285,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   onConnect: (connection) =>
     set((s) => {
       const history = pushHistory(s.history, s.nodes, s.edges)
-      const newEdges = addEdge({ ...connection, animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 } }, s.edges)
+      const newEdges = addEdge({ ...connection, animated: true, style: { stroke: '#f59e0b', strokeWidth: 2 }, data: { mark: get().selectedMark } }, s.edges)
       const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
       saveCanvas(s.currentLevelId, nodes, edges)
       const win = checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
@@ -304,6 +329,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       const history = pushHistory(s.history, s.nodes, s.edges)
       const newNodes = s.nodes.map((n) => n.id === id ? { ...n, data: { ...n.data, rotation } } : n)
       const { nodes, edges, flowResult } = runSolverAndStamp(newNodes, s.edges)
+      saveCanvas(s.currentLevelId, nodes, edges)
+      return { nodes, edges, flowResult, history }
+    }),
+
+  setSelectedMark: (mark) => set({ selectedMark: mark }),
+
+  remarkEdge: (edgeId, mark) =>
+    set((s) => {
+      const history = pushHistory(s.history, s.nodes, s.edges)
+      const newEdges = s.edges.map((e) =>
+        e.id === edgeId ? { ...e, data: { ...(e.data ?? {}), mark } } : e,
+      )
+      const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
       saveCanvas(s.currentLevelId, nodes, edges)
       return { nodes, edges, flowResult, history }
     }),

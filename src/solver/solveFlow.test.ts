@@ -368,6 +368,31 @@ describe('solveFlow', () => {
     expect(r.satisfied).toBe(true);
   });
 
+  // ── 15. Belt within capacity ──────────────────────────────────────────────
+  it('15. belt within capacity: Mk.1 edge carrying 60/min is not overloaded', () => {
+    const graph: Graph = {
+      nodes: [n.input('i1', 60), n.output('o1', 60)],
+      edges: [{ id: 'e1', source: 'i1', target: 'o1', data: { mark: 1 } }],
+    };
+    const r = solveFlow(graph);
+    expect(r.edgeRates['e1']).toBeCloseTo(60);
+    expect(r.overloadedEdges.size).toBe(0);
+    expect(r.satisfied).toBe(true);
+  });
+
+  // ── 16. Belt over capacity ────────────────────────────────────────────────
+  it('16. belt over capacity: Mk.1 edge carrying 120/min is overloaded', () => {
+    const graph: Graph = {
+      nodes: [n.input('i1', 120), n.output('o1', 120)],
+      edges: [{ id: 'e1', source: 'i1', target: 'o1', data: { mark: 1 } }],
+    };
+    const r = solveFlow(graph);
+    expect(r.edgeRates['e1']).toBeCloseTo(120);
+    expect(r.overloadedEdges.has('e1')).toBe(true);
+    // Overloaded is informational only — solver still reports satisfied if rates match.
+    expect(r.satisfied).toBe(true);
+  });
+
 });
 
 // ── Level reference solutions ──────────────────────────────────────────────

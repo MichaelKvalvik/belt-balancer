@@ -4,6 +4,7 @@ import WinModal from './components/WinModal'
 import Tutorial from './components/Tutorial'
 import Codex from './components/Codex'
 import BlueprintPanel from './components/BlueprintPanel'
+import BeltSelectorBar from './components/BeltSelectorBar'
 import { useGameStore } from './store/gameStore'
 import { levels } from './levels/levels'
 
@@ -263,6 +264,9 @@ export default function App() {
         {/* ── Main canvas ──────────────────────────────────────────── */}
         <main className="flex-1 relative overflow-hidden" data-tutorial="canvas">
           <Canvas />
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 sm:bottom-4 max-w-full overflow-x-auto">
+            <BeltSelectorBar />
+          </div>
         </main>
 
         {/* ── Right sidebar ────────────────────────────────────────── */}

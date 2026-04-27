@@ -33,7 +33,7 @@ export default function Canvas() {
   const [selBox, setSelBox] = useState<SelBox | null>(null)
   const selBoxRef     = useRef<SelBox | null>(null)
 
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, rotateNode, undo } =
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, rotateNode, undo, setSelectedMark, remarkEdge, selectedMark } =
     useGameStore()
 
   // Keep selBoxRef in sync for use inside stable window listeners
@@ -62,12 +62,17 @@ export default function Canvas() {
           const cur = ((n.data as { rotation?: number }).rotation ?? 0) as Rotation
           rotateNode(n.id, nextRotation(cur))
         }
+        return
+      }
+
+      if (e.key >= '1' && e.key <= '6' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setSelectedMark(Number(e.key) as 1 | 2 | 3 | 4 | 5 | 6)
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [nodes, edges, rotateNode, undo])
+  }, [nodes, edges, rotateNode, undo, setSelectedMark])
 
   // ── Right-click drag: box selection ─────────────────────────────────────
 
@@ -206,6 +211,7 @@ export default function Canvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onEdgeClick={(_, edge) => remarkEdge(edge.id, selectedMark)}
         nodeTypes={nodeTypes}
         onInit={(inst) => { rfRef.current = inst }}
         isValidConnection={isValidConnection}

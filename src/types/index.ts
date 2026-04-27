@@ -47,6 +47,7 @@ export interface SolverEdge {
   target: string;
   sourceHandle?: string | null;
   targetHandle?: string | null;
+  data?: { mark?: BeltMark };
 }
 
 export interface Graph {
@@ -73,6 +74,8 @@ export interface FlowResult {
   satisfied: boolean;
   /** True when a cyclic graph failed to converge. */
   unstable: boolean;
+  /** Edge IDs whose computed rate exceeds their belt mark capacity. */
+  overloadedEdges: Set<string>;
 }
 
 // ── Level definition ───────────────────────────────────────────────────────
@@ -138,6 +141,19 @@ export interface Blueprint {
   mergerCount: number;
   createdAt: number;
 }
+
+// ── Belt tiers ─────────────────────────────────────────────────────────────
+
+export type BeltMark = 1 | 2 | 3 | 4 | 5 | 6;
+
+export const BELT_CAPACITY: Record<BeltMark, number> = {
+  1: 60,
+  2: 120,
+  3: 270,
+  4: 480,
+  5: 780,
+  6: 1200,
+};
 
 export interface LevelDef {
   id: number;

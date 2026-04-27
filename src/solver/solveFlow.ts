@@ -20,7 +20,9 @@ import type {
   InputNodeData,
   OutputNodeData,
   SolverEdge,
+  BeltMark,
 } from '../types';
+import { BELT_CAPACITY } from '../types';
 
 const MAX_ITER = 1000;
 /** Stop iterating when no edge changes by more than this. */
@@ -60,6 +62,7 @@ export function solveFlow(graph: Graph): FlowResult {
       outputResults: {},
       satisfied: true,
       unstable: false,
+      overloadedEdges: new Set<string>(),
     };
   }
 
@@ -150,11 +153,21 @@ export function solveFlow(graph: Graph): FlowResult {
     }
   }
 
+  // ── Per-edge belt capacity check ─────────────────────────────────────────
+  const overloadedEdges = new Set<string>();
+  for (const edge of graph.edges) {
+    const mark: BeltMark = edge.data?.mark ?? 1;
+    const capacity = BELT_CAPACITY[mark];
+    const rate = rates[edge.id] ?? 0;
+    if (rate > capacity + 1e-9) overloadedEdges.add(edge.id);
+  }
+
   return {
     edgeRates: rates,
     nodeThroughput,
     outputResults,
     satisfied: Object.values(outputResults).every((r) => r.satisfied),
     unstable,
+    overloadedEdges,
   };
 }
