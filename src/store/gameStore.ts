@@ -195,12 +195,16 @@ function pushHistory(history: HistoryEntry[], nodes: Node[], edges: Edge[]): His
 
 export interface NodeBudget { splitters: number; mergers: number }
 
+export type AppMode = 'home' | 'tutorial' | 'puzzles' | 'free'
+
 interface GameState {
   nodes: Node[]
   edges: Edge[]
   flowResult: FlowResult | null
   nodeBudget: NodeBudget
   history: HistoryEntry[]
+
+  mode: AppMode
 
   currentLevelId: number
   completedLevelIds: number[]
@@ -211,6 +215,8 @@ interface GameState {
   blueprints: Blueprint[]
 
   selectedMark: BeltMark
+
+  setMode: (mode: AppMode) => void
 
   onNodesChange: (changes: NodeChange[]) => void
   onEdgesChange: (changes: EdgeChange[]) => void
@@ -254,6 +260,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   nodeBudget: firstLevel.nodeBudget,
   history: [],
 
+  mode: 'home',
+
   currentLevelId: firstLevel.id,
   completedLevelIds: loadProgress(),
   showWinModal: false,
@@ -263,6 +271,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   blueprints: loadBlueprints(),
 
   selectedMark: 1,
+
+  setMode: (mode) => {
+    set({ mode })
+    if (mode === 'tutorial') {
+      get().loadLevel(1)
+    } else if (mode === 'puzzles' || mode === 'free') {
+      set({ nodes: [], edges: [], flowResult: null, history: [], showWinModal: false })
+    }
+  },
 
   // ── Canvas mutations ─────────────────────────────────────────────────────
 
@@ -343,7 +360,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       )
       const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
       saveCanvas(s.currentLevelId, nodes, edges)
-      return { nodes, edges, flowResult, history }
+      const win = checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+      return { nodes, edges, flowResult, history, ...win }
     }),
 
   undo: () =>

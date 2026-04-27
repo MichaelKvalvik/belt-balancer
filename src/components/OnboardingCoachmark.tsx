@@ -24,7 +24,7 @@ const STEPS = [
 
 const CALLOUT_W = 256
 
-export default function Tutorial() {
+export default function OnboardingCoachmark() {
   const currentLevelId   = useGameStore((s) => s.currentLevelId)
   const tutorialStep     = useGameStore((s) => s.tutorialStep)
   const advanceTutorial  = useGameStore((s) => s.advanceTutorial)

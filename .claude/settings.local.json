@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npx vitest *)",
       "Bash(npx tsc *)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git mv *)",
+      "Bash(npm run *)"
     ]
   }
 }
