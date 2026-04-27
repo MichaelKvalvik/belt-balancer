@@ -72,9 +72,17 @@ export function solveFlow(graph: Graph): FlowResult {
   const rates: Record<string, number> = {};
   for (const edge of graph.edges) rates[edge.id] = 0;
 
+  // Belt capacity per outgoing edge — looked up once.
+  const edgeCap: Record<string, number> = {};
+  for (const edge of graph.edges) {
+    edgeCap[edge.id] = BELT_CAPACITY[(edge.data?.mark ?? 1) as BeltMark];
+  }
+
   let unstable = true;
 
   // ── Fixed-point iteration ────────────────────────────────────────────────
+  // Each edge carries min(intended_rate, capacity). Excess is "lost" — the
+  // splitter/merger physically can't shove more through a slower belt.
   for (let iter = 0; iter < MAX_ITER; iter++) {
     let maxDelta = 0;
 
@@ -85,11 +93,12 @@ export function solveFlow(graph: Graph): FlowResult {
 
       switch (node.kind) {
         case 'input': {
-          // Fixed source: always pushes its configured rate.
+          // Fixed source: pushes its configured rate, clamped to belt cap.
           const rate = (node.data as InputNodeData).rate;
           for (const e of outs) {
-            maxDelta = Math.max(maxDelta, Math.abs(rate - rates[e.id]));
-            rates[e.id] = rate;
+            const clamped = Math.min(rate, edgeCap[e.id]);
+            maxDelta = Math.max(maxDelta, Math.abs(clamped - rates[e.id]));
+            rates[e.id] = clamped;
           }
           break;
         }
@@ -100,19 +109,21 @@ export function solveFlow(graph: Graph): FlowResult {
           const inTotal = sum(ins, rates);
           const perOut = inTotal / outs.length;   // outs.length > 0 (guard above)
           for (const e of outs) {
-            maxDelta = Math.max(maxDelta, Math.abs(perOut - rates[e.id]));
-            rates[e.id] = perOut;
+            const clamped = Math.min(perOut, edgeCap[e.id]);
+            maxDelta = Math.max(maxDelta, Math.abs(clamped - rates[e.id]));
+            rates[e.id] = clamped;
           }
           break;
         }
 
         case 'merger': {
-          // Sums all incoming rates into one outgoing belt.
+          // Sums all incoming rates into one outgoing belt, clamped to cap.
           const ins = inEdges.get(node.id)!;
           const inTotal = sum(ins, rates);
           for (const e of outs) {
-            maxDelta = Math.max(maxDelta, Math.abs(inTotal - rates[e.id]));
-            rates[e.id] = inTotal;
+            const clamped = Math.min(inTotal, edgeCap[e.id]);
+            maxDelta = Math.max(maxDelta, Math.abs(clamped - rates[e.id]));
+            rates[e.id] = clamped;
           }
           break;
         }
@@ -154,12 +165,29 @@ export function solveFlow(graph: Graph): FlowResult {
   }
 
   // ── Per-edge belt capacity check ─────────────────────────────────────────
+  // Edge rates are already clamped to capacity, so we recompute the *intended*
+  // rate from each upstream node and flag the edge if intended > capacity.
   const overloadedEdges = new Set<string>();
-  for (const edge of graph.edges) {
-    const mark: BeltMark = edge.data?.mark ?? 1;
-    const capacity = BELT_CAPACITY[mark];
-    const rate = rates[edge.id] ?? 0;
-    if (rate > capacity + 1e-9) overloadedEdges.add(edge.id);
+  for (const node of graph.nodes) {
+    const outs = outEdges.get(node.id)!;
+    if (outs.length === 0) continue;
+    let intended = 0;
+    switch (node.kind) {
+      case 'input':
+        intended = (node.data as InputNodeData).rate;
+        break;
+      case 'splitter':
+        intended = sum(inEdges.get(node.id)!, rates) / outs.length;
+        break;
+      case 'merger':
+        intended = sum(inEdges.get(node.id)!, rates);
+        break;
+      case 'output':
+        continue;
+    }
+    for (const e of outs) {
+      if (intended > edgeCap[e.id] + 1e-9) overloadedEdges.add(e.id);
+    }
   }
 
   return {

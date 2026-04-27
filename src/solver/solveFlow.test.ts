@@ -23,7 +23,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { solveFlow } from './solveFlow';
-import type { Graph, SolverNode, SolverEdge } from '../types';
+import type { Graph, SolverNode, SolverEdge, BeltMark } from '../types';
 
 // ── tiny test-graph builders ───────────────────────────────────────────────
 
@@ -50,10 +50,14 @@ const n = {
   }),
 };
 
-const e = (id: string, source: string, target: string): SolverEdge => ({
+// Default to Mk.6 (1200/min) so existing tests, which exercise pure flow logic,
+// are never bottlenecked by belt capacity. Tests that care about clamping pass
+// a mark explicitly.
+const e = (id: string, source: string, target: string, mark: BeltMark = 6): SolverEdge => ({
   id,
   source,
   target,
+  data: { mark },
 });
 
 // ── test suite ─────────────────────────────────────────────────────────────
@@ -372,7 +376,7 @@ describe('solveFlow', () => {
   it('15. belt within capacity: Mk.1 edge carrying 60/min is not overloaded', () => {
     const graph: Graph = {
       nodes: [n.input('i1', 60), n.output('o1', 60)],
-      edges: [{ id: 'e1', source: 'i1', target: 'o1', data: { mark: 1 } }],
+      edges: [e('e1', 'i1', 'o1', 1)],
     };
     const r = solveFlow(graph);
     expect(r.edgeRates['e1']).toBeCloseTo(60);
@@ -380,17 +384,20 @@ describe('solveFlow', () => {
     expect(r.satisfied).toBe(true);
   });
 
-  // ── 16. Belt over capacity ────────────────────────────────────────────────
-  it('16. belt over capacity: Mk.1 edge carrying 120/min is overloaded', () => {
+  // ── 16. Belt over capacity (clamped) ──────────────────────────────────────
+  it('16. belt over capacity: Mk.1 belt clamps a 120/min input to 60/min, marked overloaded', () => {
     const graph: Graph = {
       nodes: [n.input('i1', 120), n.output('o1', 120)],
-      edges: [{ id: 'e1', source: 'i1', target: 'o1', data: { mark: 1 } }],
+      edges: [e('e1', 'i1', 'o1', 1)],
     };
     const r = solveFlow(graph);
-    expect(r.edgeRates['e1']).toBeCloseTo(120);
+    // Belt clamps: actual flow is 60, not 120.
+    expect(r.edgeRates['e1']).toBeCloseTo(60);
     expect(r.overloadedEdges.has('e1')).toBe(true);
-    // Overloaded is informational only — solver still reports satisfied if rates match.
-    expect(r.satisfied).toBe(true);
+    // Output target is 120 but only 60 makes it through — unsatisfied.
+    expect(r.outputResults['o1'].actual).toBeCloseTo(60);
+    expect(r.outputResults['o1'].satisfied).toBe(false);
+    expect(r.satisfied).toBe(false);
   });
 
 });
