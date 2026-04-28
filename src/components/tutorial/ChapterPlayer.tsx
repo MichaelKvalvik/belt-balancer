@@ -41,15 +41,14 @@ export default function ChapterPlayer() {
     return () => window.clearTimeout(timer)
   }, [chapter, demoPlaying, demoPaused, demoStepIndex, stepDemo])
 
-  // After demo completes, transition to try-it mode after a short pause
-  const inDemo = demoPlaying || demoStepIndex < (chapter?.demoSteps.length ?? 0)
+  // Demo and try-it are mutually exclusive views; the user opts in to try-it
+  // by clicking the "Try it" button once the demo has finished playing.
   const [showTryIt, setShowTryIt] = useState(false)
+  const inDemo = !showTryIt
   useEffect(() => {
-    if (!chapter) return
-    if (inDemo) { setShowTryIt(false); return }
-    const t = window.setTimeout(() => setShowTryIt(true), 1500)
-    return () => window.clearTimeout(t)
-  }, [chapter, inDemo])
+    // Reset whenever we open a new chapter.
+    setShowTryIt(false)
+  }, [chapter?.id])
 
   // Mark complete when try-it puzzle is satisfied
   useEffect(() => {
@@ -180,7 +179,14 @@ export default function ChapterPlayer() {
             </div>
             {/* Demo controls */}
             <div className="border-t border-slate-700 px-3 py-2 flex items-center gap-2">
-              {demoPaused ? (
+              {demoStepIndex >= totalSteps ? (
+                <button
+                  onClick={() => setShowTryIt(true)}
+                  className="flex-1 text-[11px] font-mono px-2 py-1 rounded border border-amber-500/60 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 font-bold tracking-wider"
+                >
+                  Try it →
+                </button>
+              ) : demoPaused ? (
                 <button
                   onClick={resumeDemo}
                   className="flex-1 text-[11px] font-mono px-2 py-1 rounded border border-amber-500/50 text-amber-400 hover:bg-amber-500/10"

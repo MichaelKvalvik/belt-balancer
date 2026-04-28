@@ -104,14 +104,37 @@ export function solveFlow(graph: Graph): FlowResult {
         }
 
         case 'splitter': {
-          // Divides total incoming rate equally among all connected outputs.
+          // Even split with spillover: capacity-capped ports give up their
+          // residual to uncapped ports. Iteration handles cascades.
           const ins = inEdges.get(node.id)!;
-          const inTotal = sum(ins, rates);
-          const perOut = inTotal / outs.length;   // outs.length > 0 (guard above)
+          const remaining = sum(ins, rates);
+          const assigned: Record<string, number> = {};
+          for (const e of outs) assigned[e.id] = 0;
+          let pool = remaining;
+          let active = outs.slice();
+          while (active.length > 0 && pool > 1e-12) {
+            const share = pool / active.length;
+            const next: typeof active = [];
+            let consumed = 0;
+            for (const e of active) {
+              const headroom = edgeCap[e.id] - assigned[e.id];
+              if (share >= headroom - 1e-12) {
+                assigned[e.id] = edgeCap[e.id];
+                consumed += headroom;
+              } else {
+                assigned[e.id] += share;
+                consumed += share;
+                next.push(e);
+              }
+            }
+            pool -= consumed;
+            if (next.length === active.length) break; // no progress; all uncapped
+            active = next;
+          }
           for (const e of outs) {
-            const clamped = Math.min(perOut, edgeCap[e.id]);
-            maxDelta = Math.max(maxDelta, Math.abs(clamped - rates[e.id]));
-            rates[e.id] = clamped;
+            const v = assigned[e.id];
+            maxDelta = Math.max(maxDelta, Math.abs(v - rates[e.id]));
+            rates[e.id] = v;
           }
           break;
         }

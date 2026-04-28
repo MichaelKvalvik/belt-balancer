@@ -105,6 +105,7 @@ export interface SolutionEdge {
   target: string;
   sourceHandle?: string;
   targetHandle?: string;
+  mark?: BeltMark;
 }
 
 /** A complete reference solution graph for one level. */

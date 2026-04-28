@@ -129,6 +129,34 @@ function nodesFromPuzzle(puzzle: { inputs: LevelDef['inputs']; outputs: LevelDef
   ]
 }
 
+/** I/O nodes for the demo canvas — locked, with explicit dimensions for fitView. */
+function demoIoNodesFromPuzzle(puzzle: { inputs: LevelDef['inputs']; outputs: LevelDef['outputs'] }): Node[] {
+  return [
+    ...puzzle.inputs.map((inp) => ({
+      id: inp.id, type: 'inputNode', position: inp.position,
+      deletable: false, draggable: false, selectable: false,
+      width: 120, height: 90,
+      data: { kind: 'input', rate: inp.rate } satisfies InputNodeData,
+    })),
+    ...puzzle.outputs.map((out) => ({
+      id: out.id, type: 'outputNode', position: out.position,
+      deletable: false, draggable: false, selectable: false,
+      width: 120, height: 122,
+      data: { kind: 'output', targetRate: out.targetRate } satisfies OutputNodeData,
+    })),
+  ]
+}
+
+// Approximate node sizes — set explicitly so ReactFlow can compute fitView
+// bbox without waiting for DOM measurement (which doesn't fire reliably in
+// our read-only demo canvas configuration).
+const DEMO_NODE_SIZE: Record<string, { width: number; height: number }> = {
+  inputNode:    { width: 120, height: 90 },
+  outputNode:   { width: 120, height: 122 },
+  splitterNode: { width: 80,  height: 80 },
+  mergerNode:   { width: 80,  height: 80 },
+}
+
 /** Apply a single DemoStep to demo nodes/edges (presentational, no solver). */
 function applyDemoStepToCanvas(step: DemoStep, nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[] } {
   const a = step.action
@@ -138,6 +166,7 @@ function applyDemoStepToCanvas(step: DemoStep, nodes: Node[], edges: Edge[]): { 
     else if (a.nodeType === 'outputNode')  data = { kind: 'output', targetRate: a.targetRate ?? 0 }
     else if (a.nodeType === 'splitterNode') data = { kind: 'splitter', rotation: 0 }
     else                                    data = { kind: 'merger',   rotation: 0 }
+    const size = DEMO_NODE_SIZE[a.nodeType] ?? { width: 100, height: 80 }
     const newNode: Node = {
       id: a.id,
       type: a.nodeType,
@@ -145,6 +174,8 @@ function applyDemoStepToCanvas(step: DemoStep, nodes: Node[], edges: Edge[]): { 
       deletable: false,
       draggable: false,
       selectable: false,
+      width: size.width,
+      height: size.height,
       data,
     }
     return { nodes: [...nodes, newNode], edges }
@@ -638,9 +669,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       showWinModal: false,
       hintsRevealed: 0,
       demoPlaying: true,
-      demoPaused: false,
+      demoPaused: true,
       demoStepIndex: 0,
-      demoNodes: [],
+      demoNodes: demoIoNodesFromPuzzle(ch.tryItPuzzle),
       demoEdges: [],
     })
   },
@@ -689,7 +720,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }),
 
-  replayDemo: () => set({ demoPlaying: true, demoPaused: false, demoStepIndex: 0, demoNodes: [], demoEdges: [] }),
+  replayDemo: () =>
+    set((s) => {
+      if (s.currentChapterId == null) return {}
+      const ch = chapters.find((c) => c.id === s.currentChapterId)
+      if (!ch) return {}
+      return {
+        demoPlaying: true,
+        demoPaused: true,
+        demoStepIndex: 0,
+        demoNodes: demoIoNodesFromPuzzle(ch.tryItPuzzle),
+        demoEdges: [],
+      }
+    }),
 
   skipDemo: () =>
     set((s) => {
@@ -729,16 +772,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         ? { kind: 'splitter', rotation: 0 } satisfies SplitterNodeData
         : { kind: 'merger',   rotation: 0 } satisfies MergerNodeData),
     }))
-    const solutionEdges: Edge[] = sol.edges.map((se, i) => ({
-      id: `chsol-e${i}`,
-      source: se.source,
-      target: se.target,
-      ...(se.sourceHandle != null ? { sourceHandle: se.sourceHandle } : {}),
-      ...(se.targetHandle != null ? { targetHandle: se.targetHandle } : {}),
-      animated: true,
-      style: { stroke: '#f59e0b', strokeWidth: 2 },
-      data: { mark: 1 as BeltMark },
-    }))
+    const solutionEdges: Edge[] = sol.edges.map((se, i) => {
+      const mark: BeltMark = se.mark ?? 1
+      return {
+        id: `chsol-e${i}`,
+        source: se.source,
+        target: se.target,
+        ...(se.sourceHandle != null ? { sourceHandle: se.sourceHandle } : {}),
+        ...(se.targetHandle != null ? { targetHandle: se.targetHandle } : {}),
+        animated: true,
+        style: { stroke: BELT_STROKE[mark], strokeWidth: 2 },
+        data: { mark },
+      }
+    })
     const { nodes, edges, flowResult } = runSolverAndStamp([...ioNodes, ...intermediateNodes], solutionEdges)
     set({ nodes, edges, flowResult, history: [] })
   },

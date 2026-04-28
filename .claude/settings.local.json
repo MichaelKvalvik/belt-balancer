@@ -6,7 +6,8 @@
       "mcp__Claude_Preview__preview_start",
       "Bash(git mv *)",
       "Bash(npm run *)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(curl -s \"http://localhost:5173/src/components/tutorial/DemoCanvas.tsx?t=$\\(date +%s\\)\")"
     ]
   }
 }
