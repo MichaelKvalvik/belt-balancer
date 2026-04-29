@@ -202,3 +202,20 @@ export interface ChapterDef {
   demoSteps: DemoStep[];
   tryItPuzzle: TryItPuzzle;
 }
+
+// ── Puzzle generator ───────────────────────────────────────────────────────
+
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
+
+export interface PuzzleDef {
+  inputs:     LevelInput[];
+  outputs:    LevelOutput[];
+  nodeBudget: { splitters: number; mergers: number };
+  maxBeltMark: BeltMark;
+  allowLoopbacks: boolean;
+}
+
+export interface GeneratedPuzzle {
+  puzzle:   PuzzleDef;
+  solution: SolutionDef;
+}

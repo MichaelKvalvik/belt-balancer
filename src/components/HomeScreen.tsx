@@ -78,8 +78,7 @@ export default function HomeScreen() {
             <ModeCard
               title="Puzzles"
               description="Challenge yourself with generated puzzles"
-              badge="Coming soon"
-              disabled
+              onClick={() => setMode('puzzles')}
             />
             <ModeCard
               title="Free Play"

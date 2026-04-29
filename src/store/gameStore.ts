@@ -25,11 +25,14 @@ import type {
   BlueprintEdge,
   BeltMark,
   DemoStep,
+  Difficulty,
+  GeneratedPuzzle,
 } from '../types'
 import type { Rotation } from '../utils/rotation'
 import { solveFlow } from '../solver/solveFlow'
 import { levels } from '../levels/levels'
 import { chapters } from '../tutorial/chapters'
+import { generatePuzzle } from '../solver/generatePuzzle'
 import { BELT_STROKE } from '../components/BeltSelectorBar'
 
 // ── localStorage helpers ───────────────────────────────────────────────────
@@ -75,9 +78,10 @@ interface CanvasSnapshot { nodes: Node[]; edges: Edge[] }
 function saveCanvas(levelId: number, nodes: Node[], edges: Edge[]): void {
   try { localStorage.setItem(canvasKey(levelId), JSON.stringify({ nodes, edges })) } catch { /* noop */ }
 }
-/** Persist canvas only when not in a tutorial-chapter try-it (which is ephemeral). */
+/** Persist canvas only when not in an ephemeral mode (chapter try-it, generated puzzle). */
 function persistCanvasIfPersistable(s: { currentChapterId: number | null; mode: string; currentLevelId: number }, nodes: Node[], edges: Edge[]): void {
   if (s.mode === 'tutorial' && s.currentChapterId != null) return
+  if (s.mode === 'puzzles') return
   saveCanvas(s.currentLevelId, nodes, edges)
 }
 function loadCanvas(levelId: number): CanvasSnapshot | null {
@@ -333,6 +337,12 @@ interface GameState {
 
   selectedMark: BeltMark
 
+  // Puzzle mode
+  currentDifficulty:  Difficulty | null
+  generatedPuzzle:    GeneratedPuzzle | null
+  loadGeneratedPuzzle: (difficulty: Difficulty) => void
+  clearGeneratedPuzzle: () => void
+
   setMode: (mode: AppMode) => void
 
   onNodesChange: (changes: NodeChange[]) => void
@@ -419,6 +429,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   selectedMark: 1,
 
+  currentDifficulty: null,
+  generatedPuzzle: null,
+
   setMode: (mode) => {
     set({ mode })
     if (mode === 'tutorial') {
@@ -428,9 +441,46 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentChapterId: null,
         demoPlaying: false, demoPaused: false, demoStepIndex: 0, demoNodes: [], demoEdges: [],
       })
-    } else if (mode === 'puzzles' || mode === 'free') {
+    } else if (mode === 'puzzles') {
+      // Puzzles mode shows the difficulty picker until loadGeneratedPuzzle runs.
+      set({
+        nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
+        generatedPuzzle: null, currentDifficulty: null,
+      })
+    } else if (mode === 'free') {
       set({ nodes: [], edges: [], flowResult: null, history: [], showWinModal: false })
     }
+  },
+
+  clearGeneratedPuzzle: () => set({
+    generatedPuzzle: null,
+    currentDifficulty: null,
+    nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
+  }),
+
+  loadGeneratedPuzzle: (difficulty) => {
+    const generated = generatePuzzle(difficulty)
+    const ioNodes: Node[] = [
+      ...generated.puzzle.inputs.map((inp) => ({
+        id: inp.id, type: 'inputNode', position: inp.position, deletable: false,
+        data: { kind: 'input', rate: inp.rate } satisfies InputNodeData,
+      })),
+      ...generated.puzzle.outputs.map((out) => ({
+        id: out.id, type: 'outputNode', position: out.position, deletable: false,
+        data: { kind: 'output', targetRate: out.targetRate } satisfies OutputNodeData,
+      })),
+    ]
+    const { nodes, edges, flowResult } = runSolverAndStamp(ioNodes, [])
+    set({
+      mode: 'puzzles',
+      currentDifficulty: difficulty,
+      generatedPuzzle: generated,
+      nodeBudget: generated.puzzle.nodeBudget,
+      nodes, edges, flowResult,
+      history: [],
+      showWinModal: false,
+      hintsRevealed: 0,
+    })
   },
 
   // ── Canvas mutations ─────────────────────────────────────────────────────
@@ -440,9 +490,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const { nodes, edges, flowResult } = runSolverAndStamp(applyNodeChanges(changes, s.nodes), s.edges)
       persistCanvasIfPersistable(s, nodes, edges)
       const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
+      const inPuzzle  = s.mode === 'puzzles'
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
-        : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+        : inPuzzle
+          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
+          : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, ...win }
     }),
 
@@ -451,9 +504,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, applyEdgeChanges(changes, s.edges))
       persistCanvasIfPersistable(s, nodes, edges)
       const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
+      const inPuzzle  = s.mode === 'puzzles'
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
-        : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+        : inPuzzle
+          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
+          : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, ...win }
     }),
 
@@ -464,9 +520,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
       persistCanvasIfPersistable(s, nodes, edges)
       const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
+      const inPuzzle  = s.mode === 'puzzles'
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
-        : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+        : inPuzzle
+          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
+          : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, history, ...win }
     }),
 
@@ -522,9 +581,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const { nodes, edges, flowResult } = runSolverAndStamp(s.nodes, newEdges)
       persistCanvasIfPersistable(s, nodes, edges)
       const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
+      const inPuzzle  = s.mode === 'puzzles'
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
-        : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+        : inPuzzle
+          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
+          : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, history, ...win }
     }),
 
@@ -547,24 +609,42 @@ export const useGameStore = create<GameState>((set, get) => ({
       let tutorialStep = s.tutorialStep
       if (flowResult.satisfied) {
         showWinModal = true
-        if (!completedLevelIds.includes(s.currentLevelId)) {
-          completedLevelIds = [...completedLevelIds, s.currentLevelId]
-          saveProgress(completedLevelIds)
-        }
-        if (s.currentLevelId === 1 && tutorialStep !== null) {
-          saveTutorialDone()
-          tutorialStep = null
+        // Don't mark a level "complete" while solving a generated puzzle.
+        if (s.mode !== 'puzzles') {
+          if (!completedLevelIds.includes(s.currentLevelId)) {
+            completedLevelIds = [...completedLevelIds, s.currentLevelId]
+            saveProgress(completedLevelIds)
+          }
+          if (s.currentLevelId === 1 && tutorialStep !== null) {
+            saveTutorialDone()
+            tutorialStep = null
+          }
         }
       }
       return { nodes, edges, flowResult, completedLevelIds, showWinModal, tutorialStep }
     }),
 
   resetGraph: () => {
-    const { currentLevelId, currentChapterId, mode } = get()
+    const { currentLevelId, currentChapterId, mode, generatedPuzzle } = get()
     if (mode === 'tutorial' && currentChapterId != null) {
       const ch = chapters.find((c) => c.id === currentChapterId)
       if (!ch) return
       const { nodes, edges, flowResult } = runSolverAndStamp(nodesFromPuzzle(ch.tryItPuzzle), [])
+      set({ nodes, edges, flowResult, history: [], showWinModal: false })
+      return
+    }
+    if (mode === 'puzzles' && generatedPuzzle) {
+      const ioNodes: Node[] = [
+        ...generatedPuzzle.puzzle.inputs.map((inp) => ({
+          id: inp.id, type: 'inputNode', position: inp.position, deletable: false,
+          data: { kind: 'input', rate: inp.rate } satisfies InputNodeData,
+        })),
+        ...generatedPuzzle.puzzle.outputs.map((out) => ({
+          id: out.id, type: 'outputNode', position: out.position, deletable: false,
+          data: { kind: 'output', targetRate: out.targetRate } satisfies OutputNodeData,
+        })),
+      ]
+      const { nodes, edges, flowResult } = runSolverAndStamp(ioNodes, [])
       set({ nodes, edges, flowResult, history: [], showWinModal: false })
       return
     }
@@ -586,7 +666,48 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   loadSolution: () => {
-    const { currentLevelId } = get()
+    const { currentLevelId, mode, generatedPuzzle } = get()
+
+    // Generated-puzzle case: reveal the stored solution, no level lookup.
+    if (mode === 'puzzles' && generatedPuzzle) {
+      const sol: SolutionDef = generatedPuzzle.solution
+      const ioNodes: Node[] = [
+        ...generatedPuzzle.puzzle.inputs.map((inp) => ({
+          id: inp.id, type: 'inputNode', position: inp.position, deletable: false,
+          data: { kind: 'input', rate: inp.rate } satisfies InputNodeData,
+        })),
+        ...generatedPuzzle.puzzle.outputs.map((out) => ({
+          id: out.id, type: 'outputNode', position: out.position, deletable: false,
+          data: { kind: 'output', targetRate: out.targetRate } satisfies OutputNodeData,
+        })),
+      ]
+      const intermediateNodes: Node[] = sol.nodes.map((sn) => ({
+        id: sn.id,
+        type: sn.type,
+        position: sn.position,
+        deletable: true,
+        data: (sn.type === 'splitterNode'
+          ? { kind: 'splitter', rotation: 0 } satisfies SplitterNodeData
+          : { kind: 'merger',   rotation: 0 } satisfies MergerNodeData),
+      }))
+      const solutionEdges: Edge[] = sol.edges.map((se, i) => {
+        const mark: BeltMark = se.mark ?? 1
+        return {
+          id: `gensol-e${i}`,
+          source: se.source,
+          target: se.target,
+          ...(se.sourceHandle != null ? { sourceHandle: se.sourceHandle } : {}),
+          ...(se.targetHandle != null ? { targetHandle: se.targetHandle } : {}),
+          animated: true,
+          style: { stroke: BELT_STROKE[mark], strokeWidth: 2 },
+          data: { mark },
+        }
+      })
+      const { nodes, edges, flowResult } = runSolverAndStamp([...ioNodes, ...intermediateNodes], solutionEdges)
+      set({ nodes, edges, flowResult, history: [], showWinModal: flowResult.satisfied })
+      return
+    }
+
     const level = levels.find((l) => l.id === currentLevelId)
     if (!level) return
     const sol: SolutionDef = level.solution

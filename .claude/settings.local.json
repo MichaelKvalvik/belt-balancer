@@ -7,7 +7,8 @@
       "Bash(git mv *)",
       "Bash(npm run *)",
       "Bash(xargs grep *)",
-      "Bash(curl -s \"http://localhost:5173/src/components/tutorial/DemoCanvas.tsx?t=$\\(date +%s\\)\")"
+      "Bash(curl -s \"http://localhost:5173/src/components/tutorial/DemoCanvas.tsx?t=$\\(date +%s\\)\")",
+      "Bash(npm test *)"
     ]
   }
 }
