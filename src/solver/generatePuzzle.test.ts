@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { generatePuzzle, isBuiltable } from './generatePuzzle'
+import {
+  generatePuzzle,
+  isBuiltable,
+  buildableSequence,
+  _buildLoopbackPuzzleForTest,
+} from './generatePuzzle'
 import { solveFlow } from './solveFlow'
 import type {
   GeneratedPuzzle,
   Graph,
   SolverEdge,
   SolverNode,
-  Difficulty,
 } from '../types'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -100,6 +104,28 @@ describe('isBuiltable', () => {
   })
 })
 
+describe('buildableSequence', () => {
+  it('returns the canonical 2^a × 3^b sequence', () => {
+    expect(buildableSequence(36)).toEqual([1, 2, 3, 4, 6, 8, 9, 12, 16, 18, 24, 27, 32, 36])
+  })
+  it('starts with 1', () => {
+    expect(buildableSequence(1)).toEqual([1])
+  })
+  it('handles upTo < 1 by returning []', () => {
+    expect(buildableSequence(0)).toEqual([])
+    expect(buildableSequence(-5)).toEqual([])
+  })
+  it('contains every value of form 2^a × 3^b ≤ upTo', () => {
+    const seq = buildableSequence(100)
+    const set = new Set(seq)
+    for (let a = 0; (1 << a) <= 100; a++) {
+      for (let b = 0; (1 << a) * 3 ** b <= 100; b++) {
+        expect(set.has((1 << a) * 3 ** b)).toBe(true)
+      }
+    }
+  })
+})
+
 describe('generatePuzzle — easy', () => {
   it('returns 2–3 outputs with rates ≤120, no loopback, verifies', () => {
     for (let i = 0; i < 10; i++) {
@@ -113,6 +139,11 @@ describe('generatePuzzle — easy', () => {
       expectVerifies(gen)
     }
   })
+  it('uses Infinity node budgets', () => {
+    const gen = generatePuzzle('easy')
+    expect(gen.puzzle.nodeBudget.splitters).toBe(Infinity)
+    expect(gen.puzzle.nodeBudget.mergers).toBe(Infinity)
+  })
 })
 
 describe('generatePuzzle — normal', () => {
@@ -125,72 +156,39 @@ describe('generatePuzzle — normal', () => {
       expectVerifies(gen)
     }
   })
+  it('uses Infinity node budgets', () => {
+    const gen = generatePuzzle('normal')
+    expect(gen.puzzle.nodeBudget.splitters).toBe(Infinity)
+    expect(gen.puzzle.nodeBudget.mergers).toBe(Infinity)
+  })
 })
 
 describe('generatePuzzle — hard', () => {
-  it('returns 3–5 outputs, verifies; loopbacks (if any) target a splitter input', () => {
+  it('returns 3–4 outputs, allowLoopbacks=true, verifies', () => {
     for (let i = 0; i < 10; i++) {
       const gen = generatePuzzle('hard')
       expect(gen.puzzle.outputs.length).toBeGreaterThanOrEqual(3)
-      expect(gen.puzzle.outputs.length).toBeLessThanOrEqual(5)
+      expect(gen.puzzle.outputs.length).toBeLessThanOrEqual(4)
+      expect(gen.puzzle.allowLoopbacks).toBe(true)
+      expect(gen.puzzle.maxBeltMark).toBe(3)
+      expect(gen.puzzle.nodeBudget.splitters).toBe(Infinity)
+      expect(gen.puzzle.nodeBudget.mergers).toBe(Infinity)
       expectVerifies(gen)
-
-      // If a back-edge exists, it must target a splitter input handle.
-      if (hasLoopback(gen)) {
-        const splitterIds = new Set(
-          gen.solution.nodes.filter((n) => n.type === 'splitterNode').map((n) => n.id),
-        )
-        // Identify back-edges via DFS.
-        const adj = new Map<string, { target: string; targetHandle?: string }[]>()
-        for (const e of gen.solution.edges) {
-          if (!adj.has(e.source)) adj.set(e.source, [])
-          adj.get(e.source)!.push({ target: e.target, targetHandle: e.targetHandle })
-        }
-        const color = new Map<string, 0 | 1 | 2>()
-        const backEdges: { target: string; targetHandle?: string }[] = []
-        function dfs(id: string): void {
-          color.set(id, 1)
-          for (const next of adj.get(id) ?? []) {
-            const c = color.get(next.target) ?? 0
-            if (c === 1) backEdges.push(next)
-            else if (c === 0) dfs(next.target)
-          }
-          color.set(id, 2)
-        }
-        for (const inp of gen.puzzle.inputs) {
-          if ((color.get(inp.id) ?? 0) === 0) dfs(inp.id)
-        }
-        for (const be of backEdges) {
-          expect(splitterIds.has(be.target)).toBe(true)
-          expect(be.targetHandle).toBe('in')
-        }
-      }
     }
   })
 })
 
 describe('generatePuzzle — expert', () => {
-  it('returns 4–6 outputs, verifies', () => {
+  it('returns 3–5 outputs, allowLoopbacks=true, verifies', () => {
     for (let i = 0; i < 10; i++) {
       const gen = generatePuzzle('expert')
-      expect(gen.puzzle.outputs.length).toBeGreaterThanOrEqual(4)
-      expect(gen.puzzle.outputs.length).toBeLessThanOrEqual(6)
+      expect(gen.puzzle.outputs.length).toBeGreaterThanOrEqual(3)
+      expect(gen.puzzle.outputs.length).toBeLessThanOrEqual(5)
+      expect(gen.puzzle.allowLoopbacks).toBe(true)
+      expect(gen.puzzle.maxBeltMark).toBe(6)
+      expect(gen.puzzle.nodeBudget.splitters).toBe(Infinity)
+      expect(gen.puzzle.nodeBudget.mergers).toBe(Infinity)
       expectVerifies(gen)
-    }
-  })
-})
-
-describe('generatePuzzle — nodeBudget accuracy', () => {
-  it('budget counts equal solution-node counts for every difficulty', () => {
-    const diffs: Difficulty[] = ['easy', 'normal', 'hard', 'expert']
-    for (const d of diffs) {
-      for (let i = 0; i < 5; i++) {
-        const gen = generatePuzzle(d)
-        const splitterCount = gen.solution.nodes.filter((n) => n.type === 'splitterNode').length
-        const mergerCount   = gen.solution.nodes.filter((n) => n.type === 'mergerNode').length
-        expect(gen.puzzle.nodeBudget.splitters).toBe(splitterCount)
-        expect(gen.puzzle.nodeBudget.mergers).toBe(mergerCount)
-      }
     }
   })
 })
@@ -203,5 +201,49 @@ describe('generatePuzzle — easy stress test', () => {
       expect(gen.puzzle.outputs.length).toBeLessThanOrEqual(3)
       expectVerifies(gen)
     }
+  })
+})
+
+// ── Loopback-specific scenarios ────────────────────────────────────────────
+
+describe('buildLoopbackPuzzle — L=1 (smallest non-trivial loopback)', () => {
+  it('produces a verifying puzzle for N=11, targets [3,4,4]', () => {
+    // N=11, next buildable B=12, so L=1.
+    const gen = _buildLoopbackPuzzleForTest(11, [3, 4, 4], 'hard')
+    expect(gen).not.toBeNull()
+    if (!gen) return
+    expect(gen.puzzle.inputs[0].rate).toBe(11)
+    expect(gen.puzzle.outputs.map((o) => o.targetRate).sort()).toEqual([3, 4, 4])
+    expect(gen.puzzle.allowLoopbacks).toBe(true)
+    expect(hasLoopback(gen)).toBe(true)
+    expectVerifies(gen)
+  })
+})
+
+describe('buildLoopbackPuzzle — larger L=5', () => {
+  it('produces a verifying puzzle for N=19, targets [5,7,7]', () => {
+    // N=19, next buildable B=24, so L=5.
+    const gen = _buildLoopbackPuzzleForTest(19, [5, 7, 7], 'hard')
+    expect(gen).not.toBeNull()
+    if (!gen) return
+    expect(gen.puzzle.inputs[0].rate).toBe(19)
+    expect(gen.puzzle.outputs.map((o) => o.targetRate).sort()).toEqual([5, 7, 7])
+    expect(gen.puzzle.allowLoopbacks).toBe(true)
+    expect(hasLoopback(gen)).toBe(true)
+    expectVerifies(gen)
+  })
+})
+
+describe('buildLoopbackPuzzle — L=0 (N already buildable, no loopback)', () => {
+  it('falls through to a clean-split puzzle when N is buildable (N=12)', () => {
+    // N=12 is buildable → no loopback; the helper hands off to clean split.
+    const gen = _buildLoopbackPuzzleForTest(12, [4, 4, 4], 'hard')
+    expect(gen).not.toBeNull()
+    if (!gen) return
+    expect(gen.puzzle.inputs[0].rate).toBe(12)
+    expect(hasLoopback(gen)).toBe(false)
+    expect(gen.puzzle.outputs.length).toBeGreaterThanOrEqual(3)
+    expect(gen.puzzle.outputs.length).toBeLessThanOrEqual(4)
+    expectVerifies(gen)
   })
 })

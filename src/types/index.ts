@@ -219,3 +219,28 @@ export interface GeneratedPuzzle {
   puzzle:   PuzzleDef;
   solution: SolutionDef;
 }
+
+// ── Free play ──────────────────────────────────────────────────────────────
+
+export interface FreePlayInput {
+  id: string;
+  rate: number;
+  mark: BeltMark;
+}
+
+export interface FreePlayOutput {
+  id: string;
+  targetRate: number;
+}
+
+export interface FreePlayConstraints {
+  /** Max belt tier the player intends to allow themselves (display only). 6 = no restriction. */
+  maxMark: BeltMark;
+  allowLoopbacks: boolean;
+}
+
+export interface FreePlayConfig {
+  inputs: FreePlayInput[];
+  outputs: FreePlayOutput[];
+  constraints: FreePlayConstraints;
+}

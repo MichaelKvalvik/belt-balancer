@@ -27,6 +27,7 @@ import type {
   DemoStep,
   Difficulty,
   GeneratedPuzzle,
+  FreePlayConfig,
 } from '../types'
 import type { Rotation } from '../utils/rotation'
 import { solveFlow } from '../solver/solveFlow'
@@ -82,6 +83,7 @@ function saveCanvas(levelId: number, nodes: Node[], edges: Edge[]): void {
 function persistCanvasIfPersistable(s: { currentChapterId: number | null; mode: string; currentLevelId: number }, nodes: Node[], edges: Edge[]): void {
   if (s.mode === 'tutorial' && s.currentChapterId != null) return
   if (s.mode === 'puzzles') return
+  if (s.mode === 'free') return
   saveCanvas(s.currentLevelId, nodes, edges)
 }
 function loadCanvas(levelId: number): CanvasSnapshot | null {
@@ -343,6 +345,12 @@ interface GameState {
   loadGeneratedPuzzle: (difficulty: Difficulty) => void
   clearGeneratedPuzzle: () => void
 
+  // Free play mode
+  freePlayConfig: FreePlayConfig | null
+  startFreePlay:       (config: FreePlayConfig) => void
+  exitFreePlay:        () => void
+  tryAnotherFreePlay:  () => void
+
   setMode: (mode: AppMode) => void
 
   onNodesChange: (changes: NodeChange[]) => void
@@ -432,6 +440,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentDifficulty: null,
   generatedPuzzle: null,
 
+  freePlayConfig: null,
+
   setMode: (mode) => {
     set({ mode })
     if (mode === 'tutorial') {
@@ -455,6 +465,54 @@ export const useGameStore = create<GameState>((set, get) => ({
   clearGeneratedPuzzle: () => set({
     generatedPuzzle: null,
     currentDifficulty: null,
+    nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
+  }),
+
+  // ── Free play ────────────────────────────────────────────────────────────
+
+  startFreePlay: (config: FreePlayConfig) => {
+    const colSpacing = 120
+    const baseY      = 80
+
+    const ioNodes: Node[] = [
+      ...config.inputs.map((inp, i) => ({
+        id: inp.id,
+        type: 'inputNode',
+        position: { x: 80, y: snapTo20(baseY + i * colSpacing) },
+        deletable: false,
+        data: { kind: 'input', rate: inp.rate } satisfies InputNodeData,
+      })),
+      ...config.outputs.map((out, i) => ({
+        id: out.id,
+        type: 'outputNode',
+        position: { x: 620, y: snapTo20(baseY + i * colSpacing) },
+        deletable: false,
+        data: { kind: 'output', targetRate: out.targetRate } satisfies OutputNodeData,
+      })),
+    ]
+    const { nodes, edges, flowResult } = runSolverAndStamp(ioNodes, [])
+    set({
+      mode: 'free',
+      freePlayConfig: config,
+      nodeBudget: { splitters: 9999, mergers: 9999 },
+      nodes,
+      edges,
+      flowResult,
+      history: [],
+      showWinModal: false,
+      hintsRevealed: 0,
+    })
+  },
+
+  exitFreePlay: () => set({
+    mode: 'home',
+    freePlayConfig: null,
+    nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
+  }),
+
+  /** Return to PuzzleConfig (stay in 'free' mode, clear active config + canvas). */
+  tryAnotherFreePlay: () => set({
+    freePlayConfig: null,
     nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
   }),
 
@@ -491,9 +549,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       persistCanvasIfPersistable(s, nodes, edges)
       const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
       const inPuzzle  = s.mode === 'puzzles'
+      const inFree    = s.mode === 'free'
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
-        : inPuzzle
+        : (inPuzzle || inFree)
           ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
           : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, ...win }
@@ -505,9 +564,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       persistCanvasIfPersistable(s, nodes, edges)
       const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
       const inPuzzle  = s.mode === 'puzzles'
+      const inFree    = s.mode === 'free'
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
-        : inPuzzle
+        : (inPuzzle || inFree)
           ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
           : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, ...win }
@@ -521,20 +581,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       persistCanvasIfPersistable(s, nodes, edges)
       const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
       const inPuzzle  = s.mode === 'puzzles'
+      const inFree    = s.mode === 'free'
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
-        : inPuzzle
+        : (inPuzzle || inFree)
           ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
           : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, history, ...win }
     }),
 
   addNode: (type, position) => {
-    const { nodes, nodeBudget } = get()
-    const splitters = nodes.filter((n) => n.type === 'splitterNode').length
-    const mergers   = nodes.filter((n) => n.type === 'mergerNode').length
-    if (type === 'splitterNode' && splitters >= nodeBudget.splitters) return
-    if (type === 'mergerNode'   && mergers   >= nodeBudget.mergers)   return
+    const { nodes, nodeBudget, mode } = get()
+    if (mode !== 'free') {
+      const splitters = nodes.filter((n) => n.type === 'splitterNode').length
+      const mergers   = nodes.filter((n) => n.type === 'mergerNode').length
+      if (type === 'splitterNode' && splitters >= nodeBudget.splitters) return
+      if (type === 'mergerNode'   && mergers   >= nodeBudget.mergers)   return
+    }
 
     const id = `${type.replace('Node', '')}-${Date.now()}`
     const data: GameNodeData = type === 'splitterNode'
@@ -582,9 +645,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       persistCanvasIfPersistable(s, nodes, edges)
       const inChapter = s.mode === 'tutorial' && s.currentChapterId != null
       const inPuzzle  = s.mode === 'puzzles'
+      const inFree    = s.mode === 'free'
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
-        : inPuzzle
+        : (inPuzzle || inFree)
           ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
           : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, history, ...win }
@@ -609,8 +673,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       let tutorialStep = s.tutorialStep
       if (flowResult.satisfied) {
         showWinModal = true
-        // Don't mark a level "complete" while solving a generated puzzle.
-        if (s.mode !== 'puzzles') {
+        // Don't mark a level "complete" while solving a generated puzzle or free-play session.
+        if (s.mode !== 'puzzles' && s.mode !== 'free') {
           if (!completedLevelIds.includes(s.currentLevelId)) {
             completedLevelIds = [...completedLevelIds, s.currentLevelId]
             saveProgress(completedLevelIds)
@@ -625,7 +689,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     }),
 
   resetGraph: () => {
-    const { currentLevelId, currentChapterId, mode, generatedPuzzle } = get()
+    const { currentLevelId, currentChapterId, mode, generatedPuzzle, nodes: curNodes } = get()
+    if (mode === 'free') {
+      // Keep input/output nodes (locked), drop edges and intermediate nodes.
+      const ioNodes = curNodes.filter((n) => n.type === 'inputNode' || n.type === 'outputNode')
+      const { nodes, edges, flowResult } = runSolverAndStamp(ioNodes, [])
+      set({ nodes, edges, flowResult, history: [], showWinModal: false })
+      return
+    }
     if (mode === 'tutorial' && currentChapterId != null) {
       const ch = chapters.find((c) => c.id === currentChapterId)
       if (!ch) return

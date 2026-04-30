@@ -83,8 +83,7 @@ export default function HomeScreen() {
             <ModeCard
               title="Free Play"
               description="Build your own belt network"
-              badge="Coming soon"
-              disabled
+              onClick={() => setMode('free')}
             />
           </div>
         </div>

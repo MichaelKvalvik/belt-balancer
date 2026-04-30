@@ -1,10 +1,10 @@
 /**
  * generatePuzzle — produces a fresh PuzzleDef + reference SolutionDef.
  *
- * Algorithm: build a valid splitter-tree solution first, then expose its
- * leaves (input rate at the root, output rates at the leaves) as the puzzle.
- * Because we only emit puzzles whose solutions we already constructed, every
- * generated puzzle is provably solvable.
+ * Easy / normal: build a clean splitter tree top-down; leaves become targets.
+ * Hard / expert: pick an arbitrary integer input N and integer targets summing
+ *   to N, then fold the surplus B − N (where B is the next "buildable" rate
+ *   ≥ N) back through a loopback merger so every output rate is reachable.
  */
 
 import type {
@@ -13,11 +13,15 @@ import type {
   GeneratedPuzzle,
   LevelInput,
   LevelOutput,
+  PuzzleDef,
   SolutionDef,
   SolutionEdge,
   SolutionNode,
+  SolverEdge,
+  SolverNode,
 } from '../types'
 import { BELT_CAPACITY } from '../types'
+import { solveFlow } from './solveFlow'
 
 // ── Buildable rate check ───────────────────────────────────────────────────
 
@@ -26,6 +30,43 @@ export function isBuiltable(n: number): boolean {
   if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) return false
   if (n % 60 !== 0) return false
   let m = n / 60
+  while (m % 2 === 0) m /= 2
+  while (m % 3 === 0) m /= 3
+  return m === 1
+}
+
+/** All integers of the form 2^a × 3^b (a, b ≥ 0) up to and including `upTo`. */
+export function buildableSequence(upTo: number): number[] {
+  if (upTo < 1) return []
+  const out = new Set<number>()
+  for (let p2 = 1; p2 <= upTo; p2 *= 2) {
+    for (let v = p2; v <= upTo; v *= 3) {
+      out.add(v)
+    }
+  }
+  return [...out].sort((a, b) => a - b)
+}
+
+function nextBuildable(n: number): number | null {
+  const seq = buildableSequence(Math.max(n + 32, n * 2))
+  for (const b of seq) if (b >= n) return b
+  return null
+}
+
+function gcd(a: number, b: number): number {
+  a = Math.abs(a)
+  b = Math.abs(b)
+  while (b) {
+    const t = b
+    b = a % b
+    a = t
+  }
+  return a
+}
+
+function isPow2x3(n: number): boolean {
+  if (n < 1 || !Number.isInteger(n)) return false
+  let m = n
   while (m % 2 === 0) m /= 2
   while (m % 3 === 0) m /= 3
   return m === 1
@@ -57,16 +98,31 @@ function shuffle<T>(arr: T[]): T[] {
   return out
 }
 
-// ── Splitter tree ───────────────────────────────────────────────────────────
+/** Pick `parts` random positive integers summing to `total`. */
+function randomComposition(total: number, parts: number): number[] | null {
+  if (total < parts || parts < 1) return null
+  const arr: number[] = []
+  let remaining = total
+  for (let i = 0; i < parts - 1; i++) {
+    const max = remaining - (parts - i - 1)
+    if (max < 1) return null
+    const pick = randInt(1, max)
+    arr.push(pick)
+    remaining -= pick
+  }
+  arr.push(remaining)
+  return shuffle(arr)
+}
+
+// ── Splitter tree (clean-split / easy / normal) ────────────────────────────
 
 type Tree =
   | { kind: 'leaf'; rate: number }
   | { kind: 'split'; rate: number; k: 2 | 3; children: Tree[] }
 
-/** Generate distributions of `total` into `parts` positive integers (a few attempts). */
+/** Generate distributions of `total` into `parts` positive integers. */
 function distributeLeaves(total: number, parts: number): number[][] {
   const results: number[][] = []
-  // Even split first (most natural).
   if (total % parts === 0 && total / parts >= 1) {
     results.push(Array(parts).fill(total / parts))
   }
@@ -89,9 +145,6 @@ function distributeLeaves(total: number, parts: number): number[][] {
   return results
 }
 
-/** Build a splitter tree with `rate` at the root and exactly `leaves` leaves.
- * Any rate divisible by k is a valid split — sub-rates do not need to be
- * "buildable" in the input-side sense (a 60-belt split by 2 yields 30s). */
 function buildTree(rate: number, leaves: number, maxDepth = 6): Tree | null {
   if (leaves < 1) return null
   if (leaves === 1) return { kind: 'leaf', rate }
@@ -121,10 +174,6 @@ function countLeaves(t: Tree): number {
   return t.kind === 'leaf' ? 1 : t.children.reduce((s, c) => s + countLeaves(c), 0)
 }
 
-function countSplitters(t: Tree): number {
-  return t.kind === 'leaf' ? 0 : 1 + t.children.reduce((s, c) => s + countSplitters(c), 0)
-}
-
 // ── Difficulty configuration ───────────────────────────────────────────────
 
 interface DifficultyConfig {
@@ -148,20 +197,28 @@ const CONFIGS: Record<Difficulty, DifficultyConfig> = {
     allowLoopbacks: false,
   },
   hard: {
-    outputs: [3, 5],
-    roots: [120, 180, 240],
+    outputs: [3, 4],
+    roots: [],
     maxBeltMark: 3,
-    allowLoopbacks: false,
+    allowLoopbacks: true,
   },
   expert: {
-    outputs: [4, 6],
-    roots: [120, 240, 360, 480, 540, 720, 1080],
+    outputs: [3, 5],
+    roots: [],
     maxBeltMark: 6,
-    allowLoopbacks: false,
+    allowLoopbacks: true,
   },
 }
 
-// ── Layout + solution assembly ─────────────────────────────────────────────
+const N_RANGES: Record<'hard' | 'expert', [number, number]> = {
+  hard:   [30, 200],
+  expert: [50, 1200],
+}
+
+/** Cap on the number of leaves in the loopback tree, to keep node counts sane. */
+const MAX_LOOPBACK_LEAVES = 256
+
+// ── Layout + clean-split assembly (easy / normal / L=0 fallback) ───────────
 
 const LAYOUT = {
   inputX: 80,
@@ -182,7 +239,6 @@ function treeMaxDepth(t: Tree): number {
   return 1 + Math.max(...t.children.map(treeMaxDepth))
 }
 
-/** Walk the tree, producing input + outputs + solution nodes/edges. */
 function assemble(tree: Tree, cfg: DifficultyConfig): AssembleResult {
   const solNodes: SolutionNode[] = []
   const solEdges: SolutionEdge[] = []
@@ -195,7 +251,6 @@ function assemble(tree: Tree, cfg: DifficultyConfig): AssembleResult {
   const totalDepth = treeMaxDepth(tree)
   const outputColX = Math.max(LAYOUT.outputX, LAYOUT.splitterColX(totalDepth) + 130)
 
-  /** Recurse, returning the node id created for `t` and its mid-y for layout. */
   function walk(
     t: Tree,
     depth: number,
@@ -218,7 +273,6 @@ function assemble(tree: Tree, cfg: DifficultyConfig): AssembleResult {
       return { id, midY: y + 40 }
     }
 
-    // splitter: walk children first to learn their y positions
     const id = `sol-s${++splitterCounter}`
     const childResults: { id: string; midY: number }[] = []
     for (let i = 0; i < t.children.length; i++) {
@@ -245,7 +299,6 @@ function assemble(tree: Tree, cfg: DifficultyConfig): AssembleResult {
     return { id, midY }
   }
 
-  // Create the input node and walk from the root.
   const inputId = 'in-1'
   const rootResult = walk(tree, 0, { sourceId: inputId, sourceHandle: null })
 
@@ -260,10 +313,326 @@ function assemble(tree: Tree, cfg: DifficultyConfig): AssembleResult {
   return { inputs, outputs, solution: { nodes: solNodes, edges: solEdges } }
 }
 
+// ── Loopback puzzle generation (hard / expert) ─────────────────────────────
+
+interface Endpoint {
+  sourceId: string
+  sourceHandle: string | null
+  /** Rate carried on the belt leaving this endpoint. */
+  value: number
+}
+
+interface BuildAcc {
+  nodes: SolutionNode[]
+  edges: SolutionEdge[]
+  outputs: LevelOutput[]
+  splitterId: number
+  mergerId: number
+  outputId: number
+}
+
+function newAcc(): BuildAcc {
+  return { nodes: [], edges: [], outputs: [], splitterId: 0, mergerId: 0, outputId: 0 }
+}
+
+function addEdge(
+  acc: BuildAcc,
+  from: Endpoint,
+  target: string,
+  targetHandle: string | undefined,
+  mark: BeltMark,
+): void {
+  const e: SolutionEdge = { source: from.sourceId, target, mark }
+  if (from.sourceHandle != null) e.sourceHandle = from.sourceHandle
+  if (targetHandle != null) e.targetHandle = targetHandle
+  acc.edges.push(e)
+}
+
+/** Recursively split `value` into `leafCount` equal leaves of value G = value/leafCount. */
+function buildSplitterChain(
+  acc: BuildAcc,
+  rootInput: Endpoint,
+  value: number,
+  leafCount: number,
+  cfg: DifficultyConfig,
+  depth: number,
+): Endpoint[] {
+  if (leafCount === 1) return [rootInput]
+
+  let k: 2 | 3
+  if (leafCount % 2 === 0 && value % 2 === 0) k = 2
+  else if (leafCount % 3 === 0 && value % 3 === 0) k = 3
+  else throw new Error(`buildSplitterChain: cannot split ${value} into ${leafCount}`)
+
+  const id = `sol-s${++acc.splitterId}`
+  acc.nodes.push({
+    id,
+    type: 'splitterNode',
+    position: { x: LAYOUT.splitterColX(depth), y: 60 + acc.splitterId * 30 },
+  })
+  addEdge(acc, rootInput, id, 'in', markForRate(value, cfg.maxBeltMark))
+
+  const childValue = value / k
+  const childLeafCount = leafCount / k
+  const leaves: Endpoint[] = []
+  for (let i = 0; i < k; i++) {
+    const childInput: Endpoint = {
+      sourceId: id,
+      sourceHandle: `out-${i}`,
+      value: childValue,
+    }
+    if (childLeafCount === 1) {
+      leaves.push(childInput)
+    } else {
+      leaves.push(
+        ...buildSplitterChain(acc, childInput, childValue, childLeafCount, cfg, depth + 1),
+      )
+    }
+  }
+  return leaves
+}
+
+/** Combine endpoints into a single output endpoint via a chain of mergers (≤3 ins each). */
+function buildMergerChain(
+  acc: BuildAcc,
+  inputs: Endpoint[],
+  cfg: DifficultyConfig,
+  baseX: number,
+): Endpoint {
+  if (inputs.length === 1) return inputs[0]
+
+  let current = inputs
+  let layer = 0
+  while (current.length > 1) {
+    const next: Endpoint[] = []
+    for (let i = 0; i < current.length; i += 3) {
+      const group = current.slice(i, i + 3)
+      if (group.length === 1) {
+        next.push(group[0])
+        continue
+      }
+      const id = `sol-m${++acc.mergerId}`
+      acc.nodes.push({
+        id,
+        type: 'mergerNode',
+        position: { x: baseX + layer * 100, y: 60 + acc.mergerId * 30 },
+      })
+      let summed = 0
+      for (let j = 0; j < group.length; j++) {
+        addEdge(acc, group[j], id, `in-${j}`, markForRate(group[j].value, cfg.maxBeltMark))
+        summed += group[j].value
+      }
+      next.push({ sourceId: id, sourceHandle: 'out', value: summed })
+    }
+    current = next
+    layer++
+  }
+  return current[0]
+}
+
+/** Build a complete loopback puzzle for given N + targets. Returns null if infeasible. */
+function buildLoopbackPuzzle(
+  N: number,
+  targets: number[],
+  cfg: DifficultyConfig,
+): GeneratedPuzzle | null {
+  if (N < 1 || targets.length < 1) return null
+  if (targets.some((t) => t < 1)) return null
+  if (targets.reduce((s, t) => s + t, 0) !== N) return null
+
+  const cap = BELT_CAPACITY[cfg.maxBeltMark]
+  if (N > cap) return null
+  for (const t of targets) if (t > cap) return null
+
+  const B = nextBuildable(N)
+  if (B == null || B > cap) return null
+
+  const L = B - N
+
+  if (L === 0) {
+    return generateCleanSplit(cfg, N, targets.length)
+  }
+
+  // GCD across loopback + targets. Always divides B (only 2,3 prime factors).
+  let G = L
+  for (const t of targets) G = gcd(G, t)
+
+  const leafCount = B / G
+  if (!Number.isInteger(leafCount)) return null
+  if (!isPow2x3(leafCount)) return null
+  if (leafCount > MAX_LOOPBACK_LEAVES) return null
+
+  const acc = newAcc()
+  const inputId = 'in-1'
+
+  // Front merger: input + loopback → B
+  const frontId = `sol-m${++acc.mergerId}`
+  const frontY = LAYOUT.yBase
+  acc.nodes.push({
+    id: frontId,
+    type: 'mergerNode',
+    position: { x: LAYOUT.inputX + 100, y: frontY },
+  })
+
+  acc.edges.push({
+    source: inputId,
+    target: frontId,
+    targetHandle: 'in-0',
+    mark: markForRate(N, cfg.maxBeltMark),
+  })
+
+  const rootEndpoint: Endpoint = { sourceId: frontId, sourceHandle: 'out', value: B }
+
+  // Build the splitter tree from B → leafCount leaves of value G.
+  const leaves = buildSplitterChain(acc, rootEndpoint, B, leafCount, cfg, 1)
+
+  // Partition leaves: targets in given order, then loopback.
+  let idx = 0
+  const targetGroups: Endpoint[][] = []
+  for (const t of targets) {
+    const cnt = t / G
+    targetGroups.push(leaves.slice(idx, idx + cnt))
+    idx += cnt
+  }
+  const loopGroup = leaves.slice(idx, idx + L / G)
+  idx += L / G
+  if (idx !== leaves.length) return null
+
+  // Merger chains for each target.
+  const mergerCol = LAYOUT.outputX - 250
+  const targetEndpoints: Endpoint[] = targetGroups.map((g) =>
+    buildMergerChain(acc, g, cfg, mergerCol),
+  )
+  const loopEndpoint = buildMergerChain(acc, loopGroup, cfg, mergerCol)
+
+  // Loopback edge → front merger in-1.
+  addEdge(acc, loopEndpoint, frontId, 'in-1', markForRate(L, cfg.maxBeltMark))
+
+  // Output nodes.
+  let outY = LAYOUT.yBase
+  for (let i = 0; i < targets.length; i++) {
+    const outId = `out-${++acc.outputId}`
+    const t = targets[i]
+    acc.outputs.push({
+      id: outId,
+      targetRate: t,
+      position: { x: LAYOUT.outputX + 200, y: outY },
+    })
+    outY += LAYOUT.ySpacing
+    addEdge(acc, targetEndpoints[i], outId, undefined, markForRate(t, cfg.maxBeltMark))
+  }
+
+  const inputs: LevelInput[] = [
+    { id: inputId, rate: N, position: { x: LAYOUT.inputX, y: frontY } },
+  ]
+
+  const puzzle: PuzzleDef = {
+    inputs,
+    outputs: acc.outputs,
+    nodeBudget: { splitters: Infinity, mergers: Infinity },
+    maxBeltMark: cfg.maxBeltMark,
+    allowLoopbacks: true,
+  }
+  const solution: SolutionDef = { nodes: acc.nodes, edges: acc.edges }
+
+  if (!validateSolution(puzzle, solution)) return null
+  return { puzzle, solution }
+}
+
+/** Test-only helper: build a loopback puzzle for a fixed N + targets. */
+export function _buildLoopbackPuzzleForTest(
+  N: number,
+  targets: number[],
+  difficulty: 'hard' | 'expert',
+): GeneratedPuzzle | null {
+  return buildLoopbackPuzzle(N, targets, CONFIGS[difficulty])
+}
+
+function tryGenerateLoopback(cfg: DifficultyConfig, range: [number, number]): GeneratedPuzzle | null {
+  const N = randInt(range[0], range[1])
+  const numTargets = randInt(cfg.outputs[0], cfg.outputs[1])
+  const targets = randomComposition(N, numTargets)
+  if (!targets) return null
+
+  // At least one target must be "ugly" (not in the buildable sequence).
+  const upper = targets.reduce((m, t) => Math.max(m, t), 0)
+  const buildSet = new Set(buildableSequence(upper))
+  if (targets.every((t) => buildSet.has(t))) return null
+
+  return buildLoopbackPuzzle(N, targets, cfg)
+}
+
+function generateCleanSplit(
+  cfg: DifficultyConfig,
+  N: number,
+  numTargets: number,
+): GeneratedPuzzle | null {
+  const tree = buildTree(N, numTargets)
+  if (!tree) return null
+  if (countLeaves(tree) !== numTargets) return null
+  const { inputs, outputs, solution } = assemble(tree, cfg)
+  const puzzle: PuzzleDef = {
+    inputs,
+    outputs,
+    nodeBudget: { splitters: Infinity, mergers: Infinity },
+    maxBeltMark: cfg.maxBeltMark,
+    allowLoopbacks: cfg.allowLoopbacks,
+  }
+  if (!validateSolution(puzzle, solution)) return null
+  return { puzzle, solution }
+}
+
+function validateSolution(puzzle: PuzzleDef, solution: SolutionDef): boolean {
+  const nodes: SolverNode[] = [
+    ...puzzle.inputs.map((i) => ({
+      id: i.id,
+      kind: 'input' as const,
+      data: { kind: 'input' as const, rate: i.rate },
+    })),
+    ...puzzle.outputs.map((o) => ({
+      id: o.id,
+      kind: 'output' as const,
+      data: { kind: 'output' as const, targetRate: o.targetRate },
+    })),
+    ...solution.nodes.map((sn) => ({
+      id: sn.id,
+      kind: (sn.type === 'splitterNode' ? 'splitter' : 'merger') as 'splitter' | 'merger',
+      data:
+        sn.type === 'splitterNode'
+          ? { kind: 'splitter' as const }
+          : { kind: 'merger' as const },
+    })),
+  ]
+  const edges: SolverEdge[] = solution.edges.map((e, i) => ({
+    id: `e${i}`,
+    source: e.source,
+    target: e.target,
+    sourceHandle: e.sourceHandle ?? null,
+    targetHandle: e.targetHandle ?? null,
+    data: { mark: e.mark ?? 1 },
+  }))
+  const result = solveFlow({ nodes, edges })
+  if (result.unstable || !result.satisfied) return false
+  for (const o of puzzle.outputs) {
+    const r = result.outputResults[o.id]
+    if (!r || Math.abs(r.actual - o.targetRate) > 1e-6) return false
+  }
+  return true
+}
+
 // ── Public entry point ──────────────────────────────────────────────────────
 
 export function generatePuzzle(difficulty: Difficulty): GeneratedPuzzle {
   const cfg = CONFIGS[difficulty]
+
+  if (difficulty === 'hard' || difficulty === 'expert') {
+    const range = N_RANGES[difficulty]
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const result = tryGenerateLoopback(cfg, range)
+      if (result) return result
+    }
+    return easyFallback()
+  }
 
   for (let attempt = 0; attempt < 50; attempt++) {
     const targetOutputs = randInt(cfg.outputs[0], cfg.outputs[1])
@@ -275,19 +644,21 @@ export function generatePuzzle(difficulty: Difficulty): GeneratedPuzzle {
     if (countLeaves(tree) !== targetOutputs) continue
 
     const { inputs, outputs, solution } = assemble(tree, cfg)
-    const splitters = countSplitters(tree)
 
-    const puzzle = {
+    const puzzle: PuzzleDef = {
       inputs,
       outputs,
-      nodeBudget: { splitters, mergers: 0 },
+      nodeBudget: { splitters: Infinity, mergers: Infinity },
       maxBeltMark: cfg.maxBeltMark,
       allowLoopbacks: cfg.allowLoopbacks,
     }
     return { puzzle, solution }
   }
 
-  // Deterministic fallback: a trivial 60 → 30 + 30 puzzle that always validates.
+  return easyFallback()
+}
+
+function easyFallback(): GeneratedPuzzle {
   const fallbackTree: Tree = {
     kind: 'split',
     rate: 60,
@@ -302,7 +673,7 @@ export function generatePuzzle(difficulty: Difficulty): GeneratedPuzzle {
     puzzle: {
       inputs: fb.inputs,
       outputs: fb.outputs,
-      nodeBudget: { splitters: 1, mergers: 0 },
+      nodeBudget: { splitters: Infinity, mergers: Infinity },
       maxBeltMark: 1,
       allowLoopbacks: false,
     },
