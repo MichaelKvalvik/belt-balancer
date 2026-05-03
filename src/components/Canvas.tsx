@@ -16,12 +16,15 @@ import InputNode from './nodes/InputNode'
 import OutputNode from './nodes/OutputNode'
 import SplitterNode from './nodes/SplitterNode'
 import MergerNode from './nodes/MergerNode'
+import TempInputNode from './nodes/TempInputNode'
+import BuildablePanel from './BuildablePanel'
 
 const nodeTypes: NodeTypes = {
   inputNode: InputNode,
   outputNode: OutputNode,
   splitterNode: SplitterNode,
   mergerNode: MergerNode,
+  tempInputNode: TempInputNode,
 }
 
 interface SelBox { startX: number; startY: number; curX: number; curY: number }
@@ -33,7 +36,7 @@ export default function Canvas() {
   const [selBox, setSelBox] = useState<SelBox | null>(null)
   const selBoxRef     = useRef<SelBox | null>(null)
 
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, rotateNode, undo, setSelectedMark, remarkEdge, selectedMark } =
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, rotateNode, undo, setSelectedMark, remarkEdge, selectedMark, toggleBuildablePanel } =
     useGameStore()
 
   // Keep selBoxRef in sync for use inside stable window listeners
@@ -49,6 +52,12 @@ export default function Canvas() {
       if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
         undo()
+        return
+      }
+
+      if (e.key === 'b' || e.key === 'B') {
+        if (e.ctrlKey || e.metaKey || e.altKey) return
+        toggleBuildablePanel()
         return
       }
 
@@ -72,7 +81,7 @@ export default function Canvas() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [nodes, edges, rotateNode, undo, setSelectedMark])
+  }, [nodes, edges, rotateNode, undo, setSelectedMark, toggleBuildablePanel])
 
   // ── Right-click drag: box selection ─────────────────────────────────────
 
@@ -234,6 +243,8 @@ export default function Canvas() {
         />
         <Controls showInteractive={false} />
       </ReactFlow>
+
+      <BuildablePanel />
     </div>
   )
 }

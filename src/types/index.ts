@@ -11,6 +11,16 @@ export interface InputNodeData {
   rate: number;          // fixed source rate (items/min)
 }
 
+/**
+ * Player-placeable scaffolding input. Solver treats it identically to an
+ * inputNode (kind: 'input'); the `isTemp` flag is purely for the UI.
+ */
+export interface TempInputNodeData {
+  kind: 'input';
+  rate: number;
+  isTemp: true;
+}
+
 export interface OutputNodeData {
   kind: 'output';
   targetRate: number;    // required output rate
@@ -29,6 +39,7 @@ export interface MergerNodeData {
 
 export type GameNodeData =
   | InputNodeData
+  | TempInputNodeData
   | OutputNodeData
   | SplitterNodeData
   | MergerNodeData;

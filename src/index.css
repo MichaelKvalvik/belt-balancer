@@ -52,3 +52,14 @@
 .react-flow__edge-textbg {
   fill: #1e293b;
 }
+
+/* Hide the native scrollbar on the buildable-factors chip row — the
+   right-edge gradient hints at horizontal scrollability instead. Wheel
+   and touch scrolling still work. */
+.buildable-scroll {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* legacy Edge */
+}
+.buildable-scroll::-webkit-scrollbar {
+  display: none;               /* Chromium / Safari */
+}

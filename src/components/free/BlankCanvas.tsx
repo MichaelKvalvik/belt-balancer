@@ -118,6 +118,14 @@ function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
           textClass="text-sky-400"
           hoverClass="hover:bg-sky-500/5"
         />
+        <PaletteItem
+          nodeType="tempInputNode"
+          label="Temp Input ⚡"
+          description="Stand-in for a planned loopback"
+          borderClass="border-amber-400/40 border-dashed"
+          textClass="text-amber-300"
+          hoverClass="hover:bg-amber-500/5"
+        />
         <div className="text-[10px] font-mono text-slate-600 leading-relaxed pt-1">
           Drag to canvas • Delete key removes • Unlimited
         </div>

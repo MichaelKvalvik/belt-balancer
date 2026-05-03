@@ -11,6 +11,7 @@ import {
 } from 'reactflow'
 import type {
   InputNodeData,
+  TempInputNodeData,
   OutputNodeData,
   SplitterNodeData,
   MergerNodeData,
@@ -107,11 +108,12 @@ function clearCanvas(levelId: number): void {
 
 function nodeTypeToKind(type: string | undefined): NodeKind {
   switch (type) {
-    case 'inputNode':    return 'input'
-    case 'outputNode':   return 'output'
-    case 'splitterNode': return 'splitter'
-    case 'mergerNode':   return 'merger'
-    default:             return 'input'
+    case 'inputNode':     return 'input'
+    case 'tempInputNode': return 'input'
+    case 'outputNode':    return 'output'
+    case 'splitterNode':  return 'splitter'
+    case 'mergerNode':    return 'merger'
+    default:              return 'input'
   }
 }
 
@@ -260,6 +262,34 @@ function runSolverAndStamp(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges
   return { nodes: stampedNodes, edges: stampedEdges, flowResult: result }
 }
 
+// ── Effective win check ────────────────────────────────────────────────────
+
+/**
+ * The puzzle is "effectively satisfied" only when:
+ *  1. every output meets its target rate (flowResult.satisfied), AND
+ *  2. real + temp input total equals the total output target.
+ *
+ * Condition 2 prevents a player from propping up their solution with a
+ * tempInputNode whose flow is then dumped into a dead-end splitter — i.e.
+ * the temp input must be exactly the amount a real loopback would supply.
+ */
+export function effectivelySatisfied(nodes: Node[], flowResult: FlowResult | null): boolean {
+  if (!flowResult || !flowResult.satisfied) return false
+  let realInputTotal = 0
+  let tempInputTotal = 0
+  let outputTotal = 0
+  for (const n of nodes) {
+    if (n.type === 'inputNode') {
+      realInputTotal += (n.data as InputNodeData).rate
+    } else if (n.type === 'tempInputNode') {
+      tempInputTotal += (n.data as TempInputNodeData).rate
+    } else if (n.type === 'outputNode') {
+      outputTotal += (n.data as OutputNodeData).targetRate
+    }
+  }
+  return Math.abs((realInputTotal + tempInputTotal) - outputTotal) < 0.001
+}
+
 // ── Win + tutorial helper ──────────────────────────────────────────────────
 
 interface WinCheckIn {
@@ -339,6 +369,9 @@ interface GameState {
 
   selectedMark: BeltMark
 
+  showBuildablePanel: boolean
+  toggleBuildablePanel: () => void
+
   // Puzzle mode
   currentDifficulty:  Difficulty | null
   generatedPuzzle:    GeneratedPuzzle | null
@@ -359,6 +392,7 @@ interface GameState {
   addNode: (type: string, position: { x: number; y: number }) => void
   deleteSelected: () => void
   rotateNode: (id: string, rotation: Rotation) => void
+  setTempInputRate: (id: string, rate: number) => void
   setSelectedMark: (mark: BeltMark) => void
   remarkEdge: (edgeId: string, mark: BeltMark) => void
   undo: () => void
@@ -436,6 +470,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   blueprints: loadBlueprints(),
 
   selectedMark: 1,
+
+  showBuildablePanel: false,
+  toggleBuildablePanel: () => set((s) => ({ showBuildablePanel: !s.showBuildablePanel })),
 
   currentDifficulty: null,
   generatedPuzzle: null,
@@ -553,8 +590,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
         : (inPuzzle || inFree)
-          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
-          : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!effectivelySatisfied(s.nodes, s.flowResult) && effectivelySatisfied(nodes, flowResult)) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
+          : checkWin({ prevSatisfied: effectivelySatisfied(s.nodes, s.flowResult), newSatisfied: effectivelySatisfied(nodes, flowResult), currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, ...win }
     }),
 
@@ -568,8 +605,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
         : (inPuzzle || inFree)
-          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
-          : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!effectivelySatisfied(s.nodes, s.flowResult) && effectivelySatisfied(nodes, flowResult)) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
+          : checkWin({ prevSatisfied: effectivelySatisfied(s.nodes, s.flowResult), newSatisfied: effectivelySatisfied(nodes, flowResult), currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, ...win }
     }),
 
@@ -585,14 +622,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
         : (inPuzzle || inFree)
-          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
-          : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!effectivelySatisfied(s.nodes, s.flowResult) && effectivelySatisfied(nodes, flowResult)) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
+          : checkWin({ prevSatisfied: effectivelySatisfied(s.nodes, s.flowResult), newSatisfied: effectivelySatisfied(nodes, flowResult), currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, history, ...win }
     }),
 
   addNode: (type, position) => {
     const { nodes, nodeBudget, mode } = get()
-    if (mode !== 'free') {
+    // Temp inputs are unlimited — never gated by budget.
+    if (mode !== 'free' && type !== 'tempInputNode') {
       const splitters = nodes.filter((n) => n.type === 'splitterNode').length
       const mergers   = nodes.filter((n) => n.type === 'mergerNode').length
       if (type === 'splitterNode' && splitters >= nodeBudget.splitters) return
@@ -602,8 +640,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const id = `${type.replace('Node', '')}-${Date.now()}`
     const data: GameNodeData = type === 'splitterNode'
       ? ({ kind: 'splitter', rotation: 0 } satisfies SplitterNodeData)
-      : ({ kind: 'merger',   rotation: 0 } satisfies MergerNodeData)
-    const newNode: Node = { id, type, position: { x: snapTo20(position.x), y: snapTo20(position.y) }, data }
+      : type === 'mergerNode'
+        ? ({ kind: 'merger', rotation: 0 } satisfies MergerNodeData)
+        : ({ kind: 'input', rate: 60, isTemp: true } satisfies TempInputNodeData)
+    const newNode: Node = { id, type, position: { x: snapTo20(position.x), y: snapTo20(position.y) }, data, deletable: true }
 
     set((s) => {
       const history = pushHistory(s.history, s.nodes, s.edges)
@@ -633,6 +673,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       return { nodes, edges, flowResult, history }
     }),
 
+  setTempInputRate: (id, rate) =>
+    set((s) => {
+      const safeRate = Number.isFinite(rate) && rate >= 0 ? rate : 0
+      const history = pushHistory(s.history, s.nodes, s.edges)
+      const newNodes = s.nodes.map((n) =>
+        n.id === id && n.type === 'tempInputNode'
+          ? { ...n, data: { ...n.data, rate: safeRate } }
+          : n,
+      )
+      const { nodes, edges, flowResult } = runSolverAndStamp(newNodes, s.edges)
+      persistCanvasIfPersistable(s, nodes, edges)
+      return { nodes, edges, flowResult, history }
+    }),
+
   setSelectedMark: (mark) => set({ selectedMark: mark }),
 
   remarkEdge: (edgeId, mark) =>
@@ -649,8 +703,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       const win = inChapter
         ? { completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep }
         : (inPuzzle || inFree)
-          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!s.flowResult?.satisfied && flowResult.satisfied) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
-          : checkWin({ prevSatisfied: !!s.flowResult?.satisfied, newSatisfied: flowResult.satisfied, currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
+          ? { completedLevelIds: s.completedLevelIds, showWinModal: (!effectivelySatisfied(s.nodes, s.flowResult) && effectivelySatisfied(nodes, flowResult)) ? true : s.showWinModal, tutorialStep: s.tutorialStep }
+          : checkWin({ prevSatisfied: effectivelySatisfied(s.nodes, s.flowResult), newSatisfied: effectivelySatisfied(nodes, flowResult), currentLevelId: s.currentLevelId, completedLevelIds: s.completedLevelIds, showWinModal: s.showWinModal, tutorialStep: s.tutorialStep })
       return { nodes, edges, flowResult, history, ...win }
     }),
 
@@ -671,7 +725,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       let completedLevelIds = s.completedLevelIds
       let showWinModal = s.showWinModal
       let tutorialStep = s.tutorialStep
-      if (flowResult.satisfied) {
+      if (effectivelySatisfied(nodes, flowResult)) {
         showWinModal = true
         // Don't mark a level "complete" while solving a generated puzzle or free-play session.
         if (s.mode !== 'puzzles' && s.mode !== 'free') {
@@ -775,7 +829,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       })
       const { nodes, edges, flowResult } = runSolverAndStamp([...ioNodes, ...intermediateNodes], solutionEdges)
-      set({ nodes, edges, flowResult, history: [], showWinModal: flowResult.satisfied })
+      set({ nodes, edges, flowResult, history: [], showWinModal: effectivelySatisfied(nodes, flowResult) })
       return
     }
 
@@ -823,7 +877,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       tutorialStep = null
     }
 
-    set({ nodes, edges, flowResult, history: [], completedLevelIds, tutorialStep, showWinModal: flowResult.satisfied })
+    set({ nodes, edges, flowResult, history: [], completedLevelIds, tutorialStep, showWinModal: effectivelySatisfied(nodes, flowResult) })
   },
 
   dismissWin: () => set({ showWinModal: false }),

@@ -211,7 +211,7 @@ const CONFIGS: Record<Difficulty, DifficultyConfig> = {
 }
 
 const N_RANGES: Record<'hard' | 'expert', [number, number]> = {
-  hard:   [30, 200],
+  hard:   [20, 60],
   expert: [50, 1200],
 }
 
@@ -548,7 +548,17 @@ export function _buildLoopbackPuzzleForTest(
   return buildLoopbackPuzzle(N, targets, CONFIGS[difficulty])
 }
 
-function tryGenerateLoopback(cfg: DifficultyConfig, range: [number, number]): GeneratedPuzzle | null {
+function isHardAppropriate(N: number, targets: number[], L: number): boolean {
+  const minOutput = Math.floor(N * 0.15)
+  const maxOutput = Math.floor(N * 0.40)
+  const maxLoopback = Math.floor(N * 0.15)
+  if (L > maxLoopback) return false
+  if (targets.some(t => t < minOutput)) return false
+  if (targets.some(t => t > maxOutput)) return false
+  return true
+}
+
+function tryGenerateLoopback(cfg: DifficultyConfig, range: [number, number], difficulty: 'hard' | 'expert'): GeneratedPuzzle | null {
   const N = randInt(range[0], range[1])
   const numTargets = randInt(cfg.outputs[0], cfg.outputs[1])
   const targets = randomComposition(N, numTargets)
@@ -558,6 +568,12 @@ function tryGenerateLoopback(cfg: DifficultyConfig, range: [number, number]): Ge
   const upper = targets.reduce((m, t) => Math.max(m, t), 0)
   const buildSet = new Set(buildableSequence(upper))
   if (targets.every((t) => buildSet.has(t))) return null
+
+  if (difficulty === 'hard') {
+    const B = nextBuildable(N)
+    const L = B != null ? B - N : Infinity
+    if (!isHardAppropriate(N, targets, L)) return null
+  }
 
   return buildLoopbackPuzzle(N, targets, cfg)
 }
@@ -628,7 +644,7 @@ export function generatePuzzle(difficulty: Difficulty): GeneratedPuzzle {
   if (difficulty === 'hard' || difficulty === 'expert') {
     const range = N_RANGES[difficulty]
     for (let attempt = 0; attempt < 50; attempt++) {
-      const result = tryGenerateLoopback(cfg, range)
+      const result = tryGenerateLoopback(cfg, range, difficulty)
       if (result) return result
     }
     return easyFallback()

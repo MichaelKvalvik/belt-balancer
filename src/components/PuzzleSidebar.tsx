@@ -6,6 +6,7 @@ interface PaletteItemProps {
   nodeType: string
   label: string
   description: string
+  /** Number remaining; pass `Infinity` for unlimited items (renders ∞). */
   remaining: number
   borderClass: string
   hoverClass: string
@@ -16,7 +17,8 @@ function PaletteItem({
   nodeType, label, description, remaining,
   borderClass, hoverClass, textClass,
 }: PaletteItemProps) {
-  const disabled = remaining <= 0
+  const unlimited = !Number.isFinite(remaining)
+  const disabled = !unlimited && remaining <= 0
 
   function onDragStart(e: React.DragEvent) {
     e.dataTransfer.setData('application/reactflow', nodeType)
@@ -37,7 +39,7 @@ function PaletteItem({
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono font-bold">{label}</span>
         <span className="text-[10px] font-mono text-slate-500">
-          {disabled ? 'full' : `${remaining} left`}
+          {disabled ? 'full' : unlimited ? '∞' : `${remaining} left`}
         </span>
       </div>
       <div className="text-[10px] font-mono text-slate-500 mt-0.5 leading-snug">
@@ -192,6 +194,15 @@ export default function PuzzleSidebar() {
           borderClass="border-sky-500/40"
           textClass="text-sky-400"
           hoverClass="hover:bg-sky-500/5"
+        />
+        <PaletteItem
+          nodeType="tempInputNode"
+          label="Temp Input ⚡"
+          description="Stand-in for a planned loopback"
+          remaining={Infinity}
+          borderClass="border-amber-400/40 border-dashed"
+          textClass="text-amber-300"
+          hoverClass="hover:bg-amber-500/5"
         />
         <div className="text-[10px] font-mono text-slate-600 leading-relaxed pt-1">
           Drag to canvas • Delete key removes

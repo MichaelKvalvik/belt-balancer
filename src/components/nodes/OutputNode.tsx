@@ -1,22 +1,32 @@
 import { Handle, Position, type NodeProps } from 'reactflow'
 import type { OutputNodeData } from '../../types'
+import { useGameStore } from '../../store/gameStore'
 
 export default function OutputNode({ data, selected }: NodeProps<OutputNodeData>) {
   const { targetRate, actualRate } = data
   const hasActual = actualRate !== undefined
   const satisfied = hasActual && Math.abs(actualRate - targetRate) < 0.001
+  // When temp inputs are still on the canvas, "met" is provisional — the
+  // puzzle isn't truly solved until the player removes them. Use amber
+  // instead of green to flag that.
+  const hasTempInputs = useGameStore((s) => s.nodes.some((n) => n.type === 'tempInputNode'))
+  const provisional = satisfied && hasTempInputs
 
   const borderCls = selected
     ? 'border-white shadow-[0_0_0_2px_rgba(255,255,255,0.25)]'
     : hasActual
       ? satisfied
-        ? 'border-green-500 shadow-[0_0_12px_rgba(34,197,94,0.3)]'
+        ? provisional
+          ? 'border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+          : 'border-green-500 shadow-[0_0_12px_rgba(34,197,94,0.3)]'
         : 'border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
       : 'border-slate-500 shadow-[0_0_12px_rgba(0,0,0,0.3)]'
 
   const rateColor = hasActual
-    ? satisfied ? 'text-green-400' : 'text-red-400'
+    ? satisfied ? (provisional ? 'text-amber-400' : 'text-green-400') : 'text-red-400'
     : 'text-slate-300'
+
+  const metColor = provisional ? 'text-amber-400' : 'text-green-400'
 
   return (
     <div className={`
@@ -47,7 +57,7 @@ export default function OutputNode({ data, selected }: NodeProps<OutputNodeData>
       )}
 
       {hasActual && (
-        <div className={`text-[9px] font-mono mt-0.5 font-bold tracking-wider ${satisfied ? 'text-green-400' : 'text-red-400'}`}>
+        <div className={`text-[9px] font-mono mt-0.5 font-bold tracking-wider ${satisfied ? metColor : 'text-red-400'}`}>
           {satisfied ? '✓ MET' : '✗ UNMET'}
         </div>
       )}
