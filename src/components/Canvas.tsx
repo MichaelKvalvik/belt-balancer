@@ -35,6 +35,8 @@ export default function Canvas() {
   const rfRef         = useRef<ReactFlowInstance | null>(null)
   const [selBox, setSelBox] = useState<SelBox | null>(null)
   const selBoxRef     = useRef<SelBox | null>(null)
+  // Latest pointer position in client coordinates, for hotkey-based node placement
+  const mousePosRef   = useRef<{ x: number; y: number } | null>(null)
 
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, rotateNode, undo, setSelectedMark, remarkEdge, selectedMark, toggleBuildablePanel } =
     useGameStore()
@@ -61,6 +63,18 @@ export default function Canvas() {
         return
       }
 
+      if (e.key === 's' || e.key === 'S' || e.key === 'm' || e.key === 'M') {
+        if (e.ctrlKey || e.metaKey || e.altKey) return
+        if (!rfRef.current || !wrapperRef.current || !mousePosRef.current) return
+        const bounds = wrapperRef.current.getBoundingClientRect()
+        const { x, y } = mousePosRef.current
+        if (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom) return
+        const position = rfRef.current.project({ x: x - bounds.left, y: y - bounds.top })
+        const nodeType = (e.key === 's' || e.key === 'S') ? 'splitterNode' : 'mergerNode'
+        addNode(nodeType, position)
+        return
+      }
+
       if (e.key === 'r' || e.key === 'R') {
         const selected = nodes.filter(
           (n) => n.selected && (n.type === 'splitterNode' || n.type === 'mergerNode'),
@@ -81,12 +95,13 @@ export default function Canvas() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [nodes, edges, rotateNode, undo, setSelectedMark, toggleBuildablePanel])
+  }, [nodes, edges, rotateNode, undo, setSelectedMark, toggleBuildablePanel, addNode])
 
   // ── Right-click drag: box selection ─────────────────────────────────────
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
+      mousePosRef.current = { x: e.clientX, y: e.clientY }
       if (!selBoxRef.current) return
       setSelBox((prev) => prev ? { ...prev, curX: e.clientX, curY: e.clientY } : null)
     }
