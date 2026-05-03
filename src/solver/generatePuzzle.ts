@@ -557,29 +557,54 @@ export function _buildLoopbackPuzzleForTest(
   return buildLoopbackPuzzle(N, targets, CONFIGS[difficulty])
 }
 
+/**
+ * Construct N + targets that satisfy buildLoopbackPuzzle's strict requirements
+ * (N % gcd(targets) === 0 and B/G is 2^a×3^b) by construction. Working
+ * backwards from a unit-space target Bunits guarantees those checks pass and
+ * keeps L naturally small relative to N — no random N + isHardAppropriate
+ * filter needed.
+ */
 function tryGenerateLoopback(cfg: DifficultyConfig, difficulty: 'hard' | 'expert'): GeneratedPuzzle | null {
-  // Pick a base unit G — a small 2^a×3^b value
-  const unitChoices = difficulty === 'hard' ? [10, 12, 15, 20, 30] : [5, 6, 10, 12, 15, 20, 30]
-  const G = pickFrom(unitChoices)
+  // Step 1: small base unit G. Not restricted to buildable values — any small int.
+  const G = randInt(2, 7)
 
-  // Pick number of units for N (so N = totalUnits * G).
-  // Skip values that are themselves 2^a×3^b — those produce L=0 (no loopback needed)
-  // and would fall through to a clean-split puzzle, defeating the purpose of hard/expert.
-  const [minUnits, maxUnits] = difficulty === 'hard' ? [3, 8] : [4, 12]
+  // Step 2: pick a small buildable Bunits in unit space. Must leave room for
+  // totalUnits in [Bunits*0.6, Bunits-1] and for numTargets parts.
+  const buildableUnitChoices = [6, 8, 9, 12, 16, 18, 24]
+  const Bunits = pickFrom(buildableUnitChoices)
+
+  // Step 3: pick totalUnits below Bunits, not itself 2^a×3^b (so L > 0).
+  const minUnits = Math.max(Math.ceil(Bunits * 0.6), cfg.outputs[0])
+  const maxUnits = Bunits - 1
+  if (minUnits > maxUnits) return null
   const totalUnits = randInt(minUnits, maxUnits)
   if (isPow2x3(totalUnits)) return null
+
+  // Step 4: N = totalUnits * G — guarantees N % G === 0.
   const N = totalUnits * G
 
-  const numTargets = randInt(cfg.outputs[0], cfg.outputs[1])
+  const cap = BELT_CAPACITY[cfg.maxBeltMark]
+  if (N > cap) return null
 
-  // Compose targets as multiples of G summing to N
+  // Step 5: compose targets as multiples of G summing to N.
+  const numTargets = randInt(cfg.outputs[0], cfg.outputs[1])
+  if (totalUnits < numTargets) return null
   const unitComp = randomComposition(totalUnits, numTargets)
   if (!unitComp) return null
   const targets = unitComp.map((u) => u * G)
 
-  // At least one target must be non-buildable (otherwise it's just a clean split)
+  if (targets.some((t) => t > cap)) return null
+
+  // Step 6: ugly check — at least one target must not be in the buildable sequence.
   const buildSet = new Set(buildableSequence(Math.max(...targets)))
   if (targets.every((t) => buildSet.has(t))) return null
+
+  // Step 7: balance check — every target in [15%, 40%] of N. Loopback size
+  // check is dropped: L_units = Bunits - totalUnits ≤ 0.4·Bunits and
+  // totalUnits ≥ 0.6·Bunits, so L stays naturally bounded.
+  const minOutput = Math.floor(N * 0.15)
+  const maxOutput = Math.floor(N * 0.40)
+  if (targets.some((t) => t < minOutput || t > maxOutput)) return null
 
   return buildLoopbackPuzzle(N, targets, cfg)
 }
@@ -648,7 +673,7 @@ export function generatePuzzle(difficulty: Difficulty): GeneratedPuzzle {
   const cfg = CONFIGS[difficulty]
 
   if (difficulty === 'hard' || difficulty === 'expert') {
-    for (let attempt = 0; attempt < 50; attempt++) {
+    for (let attempt = 0; attempt < 200; attempt++) {
       const result = tryGenerateLoopback(cfg, difficulty)
       if (result) return result
     }
