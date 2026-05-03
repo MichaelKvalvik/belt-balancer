@@ -210,11 +210,6 @@ const CONFIGS: Record<Difficulty, DifficultyConfig> = {
   },
 }
 
-const N_RANGES: Record<'hard' | 'expert', [number, number]> = {
-  hard:   [20, 60],
-  expert: [50, 1200],
-}
-
 /** Cap on the number of leaves in the loopback tree, to keep node counts sane. */
 const MAX_LOOPBACK_LEAVES = 256
 
@@ -444,19 +439,33 @@ function buildLoopbackPuzzle(
   if (N > cap) return null
   for (const t of targets) if (t > cap) return null
 
-  const B = nextBuildable(N)
-  if (B == null || B > cap) return null
+  // Step 1: GCD of targets only (NOT seeded with L)
+  let G = targets[0]
+  for (let i = 1; i < targets.length; i++) G = gcd(G, targets[i])
 
+  // Step 2: N must be divisible by G
+  if (N % G !== 0) return null
+  const nUnits = N / G
+
+  // Step 3: find next buildable in unit space, scale back up
+  const nextBuildableUnits = nextBuildable(nUnits)
+  if (nextBuildableUnits == null) return null
+  const B = nextBuildableUnits * G
+  if (B > cap) return null
+
+  // Step 4: loopback amount
   const L = B - N
 
+  // L=0 means N was already buildable — hand off to clean split
   if (L === 0) {
     return generateCleanSplit(cfg, N, targets.length)
   }
 
-  // GCD across loopback + targets. Always divides B (only 2,3 prime factors).
-  let G = L
-  for (const t of targets) G = gcd(G, t)
+  // Step 5: validate L divisible by G (guaranteed by construction if tryGenerateLoopback
+  // picks N as a multiple of G, but guard defensively)
+  if (L % G !== 0) return null
 
+  // Step 6: leafCount must be a 2^a×3^b integer
   const leafCount = B / G
   if (!Number.isInteger(leafCount)) return null
   if (!isPow2x3(leafCount)) return null
@@ -548,32 +557,29 @@ export function _buildLoopbackPuzzleForTest(
   return buildLoopbackPuzzle(N, targets, CONFIGS[difficulty])
 }
 
-function isHardAppropriate(N: number, targets: number[], L: number): boolean {
-  const minOutput = Math.floor(N * 0.15)
-  const maxOutput = Math.floor(N * 0.40)
-  const maxLoopback = Math.floor(N * 0.15)
-  if (L > maxLoopback) return false
-  if (targets.some(t => t < minOutput)) return false
-  if (targets.some(t => t > maxOutput)) return false
-  return true
-}
+function tryGenerateLoopback(cfg: DifficultyConfig, difficulty: 'hard' | 'expert'): GeneratedPuzzle | null {
+  // Pick a base unit G — a small 2^a×3^b value
+  const unitChoices = difficulty === 'hard' ? [10, 12, 15, 20, 30] : [5, 6, 10, 12, 15, 20, 30]
+  const G = pickFrom(unitChoices)
 
-function tryGenerateLoopback(cfg: DifficultyConfig, range: [number, number], difficulty: 'hard' | 'expert'): GeneratedPuzzle | null {
-  const N = randInt(range[0], range[1])
+  // Pick number of units for N (so N = totalUnits * G).
+  // Skip values that are themselves 2^a×3^b — those produce L=0 (no loopback needed)
+  // and would fall through to a clean-split puzzle, defeating the purpose of hard/expert.
+  const [minUnits, maxUnits] = difficulty === 'hard' ? [3, 8] : [4, 12]
+  const totalUnits = randInt(minUnits, maxUnits)
+  if (isPow2x3(totalUnits)) return null
+  const N = totalUnits * G
+
   const numTargets = randInt(cfg.outputs[0], cfg.outputs[1])
-  const targets = randomComposition(N, numTargets)
-  if (!targets) return null
 
-  // At least one target must be "ugly" (not in the buildable sequence).
-  const upper = targets.reduce((m, t) => Math.max(m, t), 0)
-  const buildSet = new Set(buildableSequence(upper))
+  // Compose targets as multiples of G summing to N
+  const unitComp = randomComposition(totalUnits, numTargets)
+  if (!unitComp) return null
+  const targets = unitComp.map((u) => u * G)
+
+  // At least one target must be non-buildable (otherwise it's just a clean split)
+  const buildSet = new Set(buildableSequence(Math.max(...targets)))
   if (targets.every((t) => buildSet.has(t))) return null
-
-  if (difficulty === 'hard') {
-    const B = nextBuildable(N)
-    const L = B != null ? B - N : Infinity
-    if (!isHardAppropriate(N, targets, L)) return null
-  }
 
   return buildLoopbackPuzzle(N, targets, cfg)
 }
@@ -642,9 +648,8 @@ export function generatePuzzle(difficulty: Difficulty): GeneratedPuzzle {
   const cfg = CONFIGS[difficulty]
 
   if (difficulty === 'hard' || difficulty === 'expert') {
-    const range = N_RANGES[difficulty]
     for (let attempt = 0; attempt < 50; attempt++) {
-      const result = tryGenerateLoopback(cfg, range, difficulty)
+      const result = tryGenerateLoopback(cfg, difficulty)
       if (result) return result
     }
     return easyFallback()

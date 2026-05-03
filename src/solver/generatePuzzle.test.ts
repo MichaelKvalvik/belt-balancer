@@ -206,31 +206,42 @@ describe('generatePuzzle — easy stress test', () => {
 
 // ── Loopback-specific scenarios ────────────────────────────────────────────
 
-describe('buildLoopbackPuzzle — L=1 (smallest non-trivial loopback)', () => {
-  it('produces a verifying puzzle for N=11, targets [3,4,4]', () => {
-    // N=11, next buildable B=12, so L=1.
-    const gen = _buildLoopbackPuzzleForTest(11, [3, 4, 4], 'hard')
+describe('buildLoopbackPuzzle — 5-way split with 1 loopback', () => {
+  it('N=300, targets=[60,60,60,60,60] — B=360, L=60, 6 leaves of 60', () => {
+    // gcd(targets)=60, N/G=5, nextBuildable(5)=6, B=360, L=60, leafCount=6
+    const gen = _buildLoopbackPuzzleForTest(300, [60, 60, 60, 60, 60], 'expert')
     expect(gen).not.toBeNull()
     if (!gen) return
-    expect(gen.puzzle.inputs[0].rate).toBe(11)
-    expect(gen.puzzle.outputs.map((o) => o.targetRate).sort()).toEqual([3, 4, 4])
-    expect(gen.puzzle.allowLoopbacks).toBe(true)
+    expect(gen.puzzle.inputs[0].rate).toBe(300)
+    expect(gen.puzzle.outputs).toHaveLength(5)
     expect(hasLoopback(gen)).toBe(true)
     expectVerifies(gen)
   })
 })
 
-describe('buildLoopbackPuzzle — larger L=5', () => {
-  it('produces a verifying puzzle for N=19, targets [5,7,7]', () => {
-    // N=19, next buildable B=24, so L=5.
-    const gen = _buildLoopbackPuzzleForTest(19, [5, 7, 7], 'hard')
+describe('buildLoopbackPuzzle — unequal targets', () => {
+  it('N=120, targets=[40,50,30] — gcd=10, B=120... wait N=120 is buildable → clean split', () => {
+    // N=120 buildable → L=0 → clean split fallback
+    const gen = _buildLoopbackPuzzleForTest(120, [40, 50, 30], 'hard')
     expect(gen).not.toBeNull()
     if (!gen) return
-    expect(gen.puzzle.inputs[0].rate).toBe(19)
-    expect(gen.puzzle.outputs.map((o) => o.targetRate).sort()).toEqual([5, 7, 7])
-    expect(gen.puzzle.allowLoopbacks).toBe(true)
+    expectVerifies(gen)
+  })
+  it('N=250, targets=[100,100,50] — gcd=50, nUnits=5, nextBuildable(5)=6, B=300, L=50, leafCount=6', () => {
+    const gen = _buildLoopbackPuzzleForTest(250, [100, 100, 50], 'expert')
+    expect(gen).not.toBeNull()
+    if (!gen) return
+    expect(gen.puzzle.inputs[0].rate).toBe(250)
     expect(hasLoopback(gen)).toBe(true)
     expectVerifies(gen)
+  })
+})
+
+describe('buildLoopbackPuzzle — returns null for incompatible inputs', () => {
+  it('returns null when N is not divisible by gcd(targets)', () => {
+    // targets=[60,60,60], G=60, N=200, 200%60 !== 0 → null
+    const gen = _buildLoopbackPuzzleForTest(200, [60, 60, 60], 'hard')
+    expect(gen).toBeNull()
   })
 })
 
