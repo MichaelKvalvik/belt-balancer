@@ -565,17 +565,25 @@ export function _buildLoopbackPuzzleForTest(
  * filter needed.
  */
 function tryGenerateLoopback(cfg: DifficultyConfig, difficulty: 'hard' | 'expert'): GeneratedPuzzle | null {
-  // Step 1: small base unit G. Not restricted to buildable values — any small int.
-  const G = randInt(2, 7)
+  // G: base unit size
+  const G = difficulty === 'expert' ? randInt(5, 20) : randInt(2, 8)
 
-  // Step 2: pick a small buildable Bunits in unit space. Must leave room for
-  // totalUnits in [Bunits*0.6, Bunits-1] and for numTargets parts.
-  const buildableUnitChoices = [6, 8, 9, 12, 16, 18, 24]
+  // Bunits: the buildable unit-space target — controls max N ceiling
+  const buildableUnitChoices = difficulty === 'expert'
+    ? [16, 18, 24, 27, 32, 36, 48, 54, 64]
+    : [6, 8, 9, 12, 16, 18]
   const Bunits = pickFrom(buildableUnitChoices)
 
   // Step 3: pick totalUnits below Bunits, not itself 2^a×3^b (so L > 0).
-  const minUnits = Math.max(Math.ceil(Bunits * 0.6), cfg.outputs[0])
-  const maxUnits = Bunits - 1
+  let minUnits: number
+  let maxUnits: number
+  if (difficulty === 'hard') {
+    minUnits = Math.max(4, cfg.outputs[0])
+    maxUnits = Math.min(12, Bunits - 1)
+  } else {
+    minUnits = Math.max(Math.ceil(Bunits * 0.6), cfg.outputs[0])
+    maxUnits = Bunits - 1
+  }
   if (minUnits > maxUnits) return null
   const totalUnits = randInt(minUnits, maxUnits)
   if (isPow2x3(totalUnits)) return null
@@ -599,11 +607,9 @@ function tryGenerateLoopback(cfg: DifficultyConfig, difficulty: 'hard' | 'expert
   const buildSet = new Set(buildableSequence(Math.max(...targets)))
   if (targets.every((t) => buildSet.has(t))) return null
 
-  // Step 7: balance check — every target in [15%, 40%] of N. Loopback size
-  // check is dropped: L_units = Bunits - totalUnits ≤ 0.4·Bunits and
-  // totalUnits ≥ 0.6·Bunits, so L stays naturally bounded.
-  const minOutput = Math.floor(N * 0.15)
-  const maxOutput = Math.floor(N * 0.40)
+  // Balance filter: expert allows a wider spread per target
+  const minOutput = Math.floor(N * (difficulty === 'expert' ? 0.10 : 0.12))
+  const maxOutput = Math.floor(N * (difficulty === 'expert' ? 0.55 : 0.45))
   if (targets.some((t) => t < minOutput || t > maxOutput)) return null
 
   return buildLoopbackPuzzle(N, targets, cfg)
