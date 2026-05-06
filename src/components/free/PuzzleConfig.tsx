@@ -139,7 +139,7 @@ export default function PuzzleConfig() {
                     <button
                       onClick={() => removeInput(i)}
                       disabled={inputs.length <= 1}
-                      className="text-[10px] text-slate-500 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed px-1.5"
+                      className="text-[10px] text-slate-500 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 md:px-1.5 flex items-center justify-center"
                       aria-label="Remove input"
                     >
                       ✕
@@ -285,12 +285,12 @@ export default function PuzzleConfig() {
           )}
         </section>
 
-        <div className="flex justify-end">
+        <div className="sticky bottom-0 -mx-4 px-4 py-3 bg-slate-950/95 backdrop-blur-sm border-t border-slate-800 md:static md:mx-0 md:px-0 md:py-0 md:bg-transparent md:backdrop-blur-none md:border-0 flex justify-end">
           <button
             onClick={onStart}
             disabled={!canStart}
             className={[
-              'px-5 py-2 text-sm font-bold rounded-lg border transition-all',
+              'w-full md:w-auto min-h-[44px] px-5 py-2 text-sm font-bold rounded-lg border transition-all',
               canStart
                 ? 'border-amber-500/60 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 active:scale-95'
                 : 'border-slate-700 text-slate-500 opacity-60 cursor-not-allowed',

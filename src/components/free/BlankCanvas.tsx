@@ -2,9 +2,14 @@ import { useState } from 'react'
 import Canvas from '../Canvas'
 import BeltSelectorBar from '../BeltSelectorBar'
 import BlueprintPanel from '../BlueprintPanel'
+import PaletteItem from '../PaletteItem'
+import MobileBottomSheet from '../MobileBottomSheet'
+import MobileGameTopBar from '../MobileGameTopBar'
+import MobileActionBar from '../MobileActionBar'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useGameStore } from '../../store/gameStore'
 
-function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
+function FreePlaySidebarBody({ onAskNew }: { onAskNew: () => void }) {
   const {
     nodes,
     edges,
@@ -34,7 +39,7 @@ function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
   }
 
   return (
-    <aside className="w-52 bg-slate-900 border-l border-slate-700 shrink-0 flex flex-col overflow-y-auto">
+    <>
       <div className="px-3 py-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest border-b border-slate-800 flex items-center justify-between">
         <span>Free Play</span>
         <button
@@ -106,6 +111,7 @@ function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
           nodeType="splitterNode"
           label="Splitter"
           description="1 in → up to 3 out"
+          remaining={Infinity}
           borderClass="border-orange-500/40"
           textClass="text-orange-400"
           hoverClass="hover:bg-orange-500/5"
@@ -114,6 +120,7 @@ function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
           nodeType="mergerNode"
           label="Merger"
           description="up to 3 in → 1 out"
+          remaining={Infinity}
           borderClass="border-sky-500/40"
           textClass="text-sky-400"
           hoverClass="hover:bg-sky-500/5"
@@ -122,12 +129,13 @@ function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
           nodeType="tempInputNode"
           label="Temp Input ⚡"
           description="Stand-in for a planned loopback"
+          remaining={Infinity}
           borderClass="border-amber-400/40 border-dashed"
           textClass="text-amber-300"
           hoverClass="hover:bg-amber-500/5"
         />
         <div className="text-[10px] font-mono text-slate-600 leading-relaxed pt-1">
-          Drag to canvas • Delete key removes • Unlimited
+          Drag (or tap) to place • Delete key removes • Unlimited
         </div>
       </div>
 
@@ -136,20 +144,20 @@ function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
         <button
           disabled
           title="Coming soon"
-          className="w-full text-[11px] font-mono text-slate-500 border border-slate-700 rounded py-1.5 opacity-50 cursor-not-allowed"
+          className="w-full min-h-[44px] text-[11px] font-mono text-slate-500 border border-slate-700 rounded py-1.5 opacity-50 cursor-not-allowed"
         >
           Solve for me
         </button>
         <button
           onClick={onReset}
           disabled={!isDirty}
-          className="w-full text-[11px] font-mono text-slate-400 border border-slate-700 rounded py-1.5 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="w-full min-h-[44px] text-[11px] font-mono text-slate-400 border border-slate-700 rounded py-1.5 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Reset Canvas
         </button>
         <button
           onClick={onAskNew}
-          className="w-full text-[11px] font-mono text-amber-400 border border-amber-500/50 rounded py-1.5 hover:bg-amber-500/10 transition-colors"
+          className="w-full min-h-[44px] text-[11px] font-mono text-amber-400 border border-amber-500/50 rounded py-1.5 hover:bg-amber-500/10 transition-colors"
         >
           New Puzzle
         </button>
@@ -167,39 +175,31 @@ function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
           onDelete={deleteBlueprint}
         />
       </div>
-    </aside>
+    </>
   )
 }
 
-interface PaletteItemProps {
-  nodeType: string
-  label: string
-  description: string
-  borderClass: string
-  hoverClass: string
-  textClass: string
-}
+function FreePlayPeek() {
+  const flowResult = useGameStore((s) => s.flowResult)
+  const nodes = useGameStore((s) => s.nodes)
+  const edges = useGameStore((s) => s.edges)
+  const isDirty = edges.length > 0 || nodes.some((n) => n.type === 'splitterNode' || n.type === 'mergerNode')
 
-function PaletteItem({ nodeType, label, description, borderClass, hoverClass, textClass }: PaletteItemProps) {
-  function onDragStart(e: React.DragEvent) {
-    e.dataTransfer.setData('application/reactflow', nodeType)
-    e.dataTransfer.effectAllowed = 'move'
+  if (flowResult?.satisfied) {
+    return <span className="text-[11px] font-mono text-green-400 font-bold">✓ Solved</span>
   }
   return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      className={[
-        'rounded border px-2.5 py-2 transition-colors select-none cursor-grab active:cursor-grabbing',
-        borderClass, textClass, hoverClass,
-      ].join(' ')}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-mono font-bold">{label}</span>
-        <span className="text-[10px] font-mono text-slate-500">∞</span>
-      </div>
-      <div className="text-[10px] font-mono text-slate-500 mt-0.5 leading-snug">{description}</div>
-    </div>
+    <span className="text-[11px] font-mono text-slate-400">
+      {isDirty ? 'Reset / New Puzzle' : 'Tools & palette'}
+    </span>
+  )
+}
+
+function FreePlaySidebar({ onAskNew }: { onAskNew: () => void }) {
+  return (
+    <aside className="hidden md:flex w-52 bg-slate-900 border-l border-slate-700 shrink-0 flex-col overflow-y-auto">
+      <FreePlaySidebarBody onAskNew={onAskNew} />
+    </aside>
   )
 }
 
@@ -216,7 +216,7 @@ function WinBanner({ onTryAnother }: { onTryAnother: () => void }) {
       onClick={dismissWin}
     >
       <div
-        className="bg-slate-800 border border-green-500/40 rounded-2xl p-8 text-center w-80 shadow-2xl shadow-green-500/10"
+        className="bg-slate-800 border border-green-500/40 rounded-2xl p-8 text-center w-[min(20rem,calc(100vw-2rem))] shadow-2xl shadow-green-500/10"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-16 h-16 rounded-full bg-green-500/10 border-2 border-green-500/40 flex items-center justify-center mx-auto mb-5">
@@ -247,18 +247,64 @@ interface BlankCanvasProps {
   onTryAnother: () => void
 }
 
+function FreePlayMobileStatus() {
+  const flowResult = useGameStore((s) => s.flowResult)
+  if (!flowResult?.satisfied) return null
+  return (
+    <div className="flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold border shrink-0 text-green-400 bg-green-500/10 border-green-500/30">
+      ✓
+    </div>
+  )
+}
+
 export default function BlankCanvas({ onTryAnother }: BlankCanvasProps) {
   // Stable wrapper key — prevents accidental React Flow remounts on store updates
   const [mountKey] = useState(() => `fp-${Date.now()}`)
+  const isMobile = useIsMobile()
+  const exitFreePlay = useGameStore((s) => s.exitFreePlay)
+  const resetGraph   = useGameStore((s) => s.resetGraph)
+  const nodes        = useGameStore((s) => s.nodes)
+  const edges        = useGameStore((s) => s.edges)
+  const isDirty = edges.length > 0 || nodes.some((n) => n.type === 'splitterNode' || n.type === 'mergerNode')
+
+  function onBack() {
+    if (isDirty && !window.confirm('Discard your current canvas and return home?')) return
+    exitFreePlay()
+  }
+  function onReset() {
+    if (!isDirty) return
+    if (!window.confirm('Clear all belts and intermediate nodes?')) return
+    resetGraph()
+  }
+
   return (
-    <div className="flex h-screen w-screen bg-slate-950 overflow-hidden" key={mountKey}>
-      <main className="flex-1 relative overflow-hidden">
-        <Canvas />
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto">
-          <BeltSelectorBar />
-        </div>
-      </main>
-      <FreePlaySidebar onAskNew={onTryAnother} />
+    <div className="flex flex-col md:flex-row h-screen w-screen bg-slate-950 overflow-hidden" key={mountKey}>
+      <MobileGameTopBar
+        onBack={onBack}
+        backLabel="← Home"
+        title={<span className="text-slate-500 uppercase tracking-widest text-[10px]">Free Play</span>}
+        status={<FreePlayMobileStatus />}
+        overflow={[
+          { label: 'Reset canvas', onClick: onReset },
+          { label: 'New puzzle',   onClick: onTryAnother },
+        ]}
+      />
+      <div className="flex flex-1 overflow-hidden">
+        <main className="flex-1 relative overflow-hidden">
+          <Canvas />
+          <div className="absolute bottom-32 md:bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto">
+            <BeltSelectorBar />
+          </div>
+          {/* Free play auto-validates, so no Validate button. */}
+          <MobileActionBar showValidate={false} />
+        </main>
+        <FreePlaySidebar onAskNew={onTryAnother} />
+      </div>
+      {isMobile && (
+        <MobileBottomSheet peek={<FreePlayPeek />}>
+          <FreePlaySidebarBody onAskNew={onTryAnother} />
+        </MobileBottomSheet>
+      )}
       <WinBanner onTryAnother={onTryAnother} />
     </div>
   )

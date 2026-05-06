@@ -29,6 +29,11 @@ const nodeTypes: NodeTypes = {
 
 interface SelBox { startX: number; startY: number; curX: number; curY: number }
 
+function isCoarsePointer(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia('(pointer: coarse)').matches
+}
+
 export default function Canvas() {
   const wrapperRef    = useRef<HTMLDivElement>(null)
   // Store the RF instance in a ref so stable event handlers can read it without closure staleness
@@ -41,6 +46,10 @@ export default function Canvas() {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, rotateNode, undo, setSelectedMark, remarkEdge, selectedMark, toggleBuildablePanel } =
     useGameStore()
 
+  const armedNodeType = useGameStore((s) => s.armedNodeType)
+  const armNode       = useGameStore((s) => s.armNode)
+  const placeArmedNode = useGameStore((s) => s.placeArmedNode)
+
   // Keep selBoxRef in sync for use inside stable window listeners
   useEffect(() => { selBoxRef.current = selBox }, [selBox])
 
@@ -50,6 +59,14 @@ export default function Canvas() {
     function onKeyDown(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+      if (e.key === 'Escape') {
+        if (armedNodeType) {
+          armNode(null)
+          e.preventDefault()
+          return
+        }
+      }
 
       if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
@@ -95,19 +112,21 @@ export default function Canvas() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [nodes, edges, rotateNode, undo, setSelectedMark, toggleBuildablePanel, addNode])
+  }, [nodes, edges, rotateNode, undo, setSelectedMark, toggleBuildablePanel, addNode, armedNodeType, armNode])
 
-  // ── Right-click drag: box selection ─────────────────────────────────────
+  // ── Right-click drag: box selection (mouse only — disabled on touch) ─────
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
       mousePosRef.current = { x: e.clientX, y: e.clientY }
       if (!selBoxRef.current) return
+      if (isCoarsePointer()) return
       setSelBox((prev) => prev ? { ...prev, curX: e.clientX, curY: e.clientY } : null)
     }
 
     function onMouseUp(e: MouseEvent) {
       if (e.button !== 2) return
+      if (isCoarsePointer()) return
       const box = selBoxRef.current
       if (!box || !rfRef.current || !wrapperRef.current) { setSelBox(null); return }
 
@@ -146,8 +165,28 @@ export default function Canvas() {
 
   function onWrapperMouseDown(e: React.MouseEvent) {
     if (e.button !== 2) return
+    // Disable right-click box selection on touch devices.
+    if (isCoarsePointer()) return
     e.preventDefault()
     setSelBox({ startX: e.clientX, startY: e.clientY, curX: e.clientX, curY: e.clientY })
+  }
+
+  // ── Tap-to-place (mobile) ────────────────────────────────────────────────
+
+  function onWrapperClick(e: React.MouseEvent) {
+    if (!armedNodeType) return
+    if (!rfRef.current || !wrapperRef.current) return
+    // Only place when the click lands on the React Flow background pane,
+    // not on a node, edge, handle, or control. The pane carries the
+    // `react-flow__pane` class.
+    const target = e.target as HTMLElement
+    if (!target.classList.contains('react-flow__pane')) return
+    const bounds = wrapperRef.current.getBoundingClientRect()
+    const position = rfRef.current.project({
+      x: e.clientX - bounds.left,
+      y: e.clientY - bounds.top,
+    })
+    placeArmedNode(position)
   }
 
   // ── Drag-and-drop from palette ───────────────────────────────────────────
@@ -211,10 +250,14 @@ export default function Canvas() {
   return (
     <div
       ref={wrapperRef}
-      className="w-full h-full relative"
+      className={[
+        'w-full h-full relative',
+        armedNodeType ? 'cursor-crosshair ring-2 ring-amber-500/30 ring-inset' : '',
+      ].join(' ')}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onMouseDown={onWrapperMouseDown}
+      onClick={onWrapperClick}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Right-click drag selection rectangle */}
@@ -249,6 +292,7 @@ export default function Canvas() {
           style: { stroke: '#f59e0b', strokeWidth: 2 },
         }}
         proOptions={{ hideAttribution: false }}
+        panOnDrag={[0, 1, 2]}
       >
         <Background
           variant={BackgroundVariant.Dots}

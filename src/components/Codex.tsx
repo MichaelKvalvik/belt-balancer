@@ -83,7 +83,8 @@ export default function Codex({ onClose }: CodexProps) {
           </h2>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white font-mono text-base transition-colors leading-none"
+            className="text-slate-400 hover:text-white font-mono text-base transition-colors leading-none min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Close codex"
           >
             ✕
           </button>

@@ -1,6 +1,11 @@
 import Canvas from '../Canvas'
 import BeltSelectorBar from '../BeltSelectorBar'
 import BlueprintPanel from '../BlueprintPanel'
+import PaletteItem from '../PaletteItem'
+import MobileBottomSheet from '../MobileBottomSheet'
+import MobileGameTopBar from '../MobileGameTopBar'
+import MobileActionBar from '../MobileActionBar'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useGameStore } from '../../store/gameStore'
 import type { Difficulty } from '../../types'
 
@@ -11,7 +16,7 @@ const DIFFICULTY_BADGE: Record<Difficulty, string> = {
   expert: 'text-red-400 border-red-700',
 }
 
-function GeneratedPuzzleSidebar() {
+function GeneratedPuzzleSidebarBody() {
   const {
     nodes,
     flowResult,
@@ -39,7 +44,7 @@ function GeneratedPuzzleSidebar() {
   const badge = DIFFICULTY_BADGE[currentDifficulty]
 
   return (
-    <aside className="w-52 bg-slate-900 border-l border-slate-700 shrink-0 flex flex-col overflow-y-auto">
+    <>
       <div className="px-3 py-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest border-b border-slate-800 flex items-center justify-between">
         <span>Generated Puzzle</span>
         <span className={`text-[9px] font-mono uppercase tracking-widest border rounded px-1.5 py-0.5 ${badge}`}>
@@ -124,7 +129,7 @@ function GeneratedPuzzleSidebar() {
           hoverClass="hover:bg-amber-500/5"
         />
         <div className="text-[10px] font-mono text-slate-600 leading-relaxed pt-1">
-          Drag to canvas • Delete key removes
+          Drag (or tap) to place • Delete key removes
         </div>
       </div>
 
@@ -132,20 +137,20 @@ function GeneratedPuzzleSidebar() {
       <div className="p-3 space-y-2 border-b border-slate-800">
         <button
           onClick={() => loadGeneratedPuzzle(currentDifficulty)}
-          className="w-full text-[11px] font-mono text-amber-400 border border-amber-500/50 rounded py-1.5 hover:bg-amber-500/10 transition-colors"
+          className="w-full min-h-[44px] text-[11px] font-mono text-amber-400 border border-amber-500/50 rounded py-1.5 hover:bg-amber-500/10 transition-colors"
         >
           New Puzzle
         </button>
         <button
           onClick={loadSolution}
-          className="w-full text-[11px] font-mono text-slate-400 border border-slate-700 rounded py-1.5 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+          className="w-full min-h-[44px] text-[11px] font-mono text-slate-400 border border-slate-700 rounded py-1.5 hover:bg-slate-800 hover:text-slate-200 transition-colors"
           title="Reveal the reference solution (free in puzzle mode)"
         >
           Solve for me
         </button>
         <button
           onClick={clearGeneratedPuzzle}
-          className="w-full text-[11px] font-mono text-slate-500 border border-slate-700 rounded py-1.5 hover:bg-slate-800 hover:text-slate-300 transition-colors"
+          className="w-full min-h-[44px] text-[11px] font-mono text-slate-500 border border-slate-700 rounded py-1.5 hover:bg-slate-800 hover:text-slate-300 transition-colors"
         >
           Change Difficulty
         </button>
@@ -163,54 +168,33 @@ function GeneratedPuzzleSidebar() {
           onDelete={deleteBlueprint}
         />
       </div>
-    </aside>
+    </>
   )
 }
 
-interface PaletteItemProps {
-  nodeType: string
-  label: string
-  description: string
-  /** Pass `Infinity` for unlimited items (renders ∞). */
-  remaining: number
-  borderClass: string
-  hoverClass: string
-  textClass: string
+function GeneratedPuzzlePeek() {
+  const flowResult = useGameStore((s) => s.flowResult)
+  if (!flowResult) {
+    return <span className="text-[11px] font-mono text-slate-400">Tools & palette</span>
+  }
+  const results = Object.values(flowResult.outputResults)
+  const satisfied = results.filter((r) => r.satisfied).length
+  const total = results.length
+  if (flowResult.satisfied && total > 0) {
+    return <span className="text-[11px] font-mono text-green-400 font-bold">✓ Solved</span>
+  }
+  return (
+    <span className="text-[11px] font-mono text-slate-400">
+      Outputs: <span className="text-amber-400">{satisfied}</span> / {total}
+    </span>
+  )
 }
 
-function PaletteItem({
-  nodeType, label, description, remaining,
-  borderClass, hoverClass, textClass,
-}: PaletteItemProps) {
-  const unlimited = !Number.isFinite(remaining)
-  const disabled = !unlimited && remaining <= 0
-
-  function onDragStart(e: React.DragEvent) {
-    e.dataTransfer.setData('application/reactflow', nodeType)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
+function GeneratedPuzzleSidebar() {
   return (
-    <div
-      draggable={!disabled}
-      onDragStart={disabled ? undefined : onDragStart}
-      className={[
-        'rounded border px-2.5 py-2 transition-colors select-none',
-        disabled
-          ? 'border-slate-700 opacity-40 cursor-not-allowed'
-          : `${borderClass} ${textClass} ${hoverClass} cursor-grab active:cursor-grabbing`,
-      ].join(' ')}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-mono font-bold">{label}</span>
-        <span className="text-[10px] font-mono text-slate-500">
-          {disabled ? 'full' : unlimited ? '∞' : `${remaining} left`}
-        </span>
-      </div>
-      <div className="text-[10px] font-mono text-slate-500 mt-0.5 leading-snug">
-        {description}
-      </div>
-    </div>
+    <aside className="hidden md:flex w-52 bg-slate-900 border-l border-slate-700 shrink-0 flex-col overflow-y-auto">
+      <GeneratedPuzzleSidebarBody />
+    </aside>
   )
 }
 
@@ -228,7 +212,7 @@ function WinBanner() {
       onClick={dismissWin}
     >
       <div
-        className="bg-slate-800 border border-green-500/40 rounded-2xl p-8 text-center w-80 shadow-2xl shadow-green-500/10"
+        className="bg-slate-800 border border-green-500/40 rounded-2xl p-8 text-center w-[min(20rem,calc(100vw-2rem))] shadow-2xl shadow-green-500/10"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-16 h-16 rounded-full bg-green-500/10 border-2 border-green-500/40 flex items-center justify-center mx-auto mb-5">
@@ -260,16 +244,62 @@ function WinBanner() {
   )
 }
 
-export default function GeneratedPuzzleScreen() {
+function MobileStatusBadge() {
+  const flowResult = useGameStore((s) => s.flowResult)
+  if (!flowResult) return null
+  const ok = flowResult.satisfied
   return (
-    <div className="flex h-screen w-screen bg-slate-950 overflow-hidden">
-      <main className="flex-1 relative overflow-hidden">
-        <Canvas />
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto">
-          <BeltSelectorBar />
-        </div>
-      </main>
-      <GeneratedPuzzleSidebar />
+    <div className={[
+      'flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold border shrink-0',
+      ok
+        ? 'text-green-400 bg-green-500/10 border-green-500/30'
+        : 'text-red-400 bg-red-500/10 border-red-500/30',
+    ].join(' ')}>
+      {ok ? '✓ Solved' : '✗'}
+    </div>
+  )
+}
+
+export default function GeneratedPuzzleScreen() {
+  const isMobile = useIsMobile()
+  const currentDifficulty   = useGameStore((s) => s.currentDifficulty)
+  const loadGeneratedPuzzle = useGameStore((s) => s.loadGeneratedPuzzle)
+  const loadSolution        = useGameStore((s) => s.loadSolution)
+  const clearGeneratedPuzzle = useGameStore((s) => s.clearGeneratedPuzzle)
+
+  return (
+    <div className="flex flex-col md:flex-row h-screen w-screen bg-slate-950 overflow-hidden">
+      <MobileGameTopBar
+        onBack={clearGeneratedPuzzle}
+        backLabel="← Home"
+        title={
+          <span>
+            <span className="text-slate-500 uppercase tracking-widest text-[10px]">Puzzle</span>
+            {currentDifficulty && <span className="ml-1.5 text-amber-400 capitalize">{currentDifficulty}</span>}
+          </span>
+        }
+        status={<MobileStatusBadge />}
+        overflow={[
+          ...(currentDifficulty ? [{ label: 'New puzzle', onClick: () => loadGeneratedPuzzle(currentDifficulty) }] : []),
+          { label: 'Solve for me', onClick: loadSolution },
+          { label: 'Change difficulty', onClick: clearGeneratedPuzzle },
+        ]}
+      />
+      <div className="flex flex-1 overflow-hidden">
+        <main className="flex-1 relative overflow-hidden">
+          <Canvas />
+          <div className="absolute bottom-32 md:bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto">
+            <BeltSelectorBar />
+          </div>
+          <MobileActionBar showValidate={true} />
+        </main>
+        <GeneratedPuzzleSidebar />
+      </div>
+      {isMobile && (
+        <MobileBottomSheet peek={<GeneratedPuzzlePeek />}>
+          <GeneratedPuzzleSidebarBody />
+        </MobileBottomSheet>
+      )}
       <WinBanner />
     </div>
   )

@@ -20,7 +20,7 @@ export default function BuildablePanel() {
         title="Toggle buildable totals (B)"
         className={[
           'pointer-events-auto absolute top-2 right-2',
-          'px-2.5 py-1 rounded font-mono text-[11px] tracking-wide',
+          'min-h-[40px] px-2.5 py-1 rounded font-mono text-[11px] tracking-wide',
           'border transition-colors select-none',
           open
             ? 'bg-amber-500/15 border-amber-500 text-amber-300'

@@ -18,7 +18,7 @@ export default function WinModal({ levelId, onNext, onClose }: WinModalProps) {
     >
       {/* Card */}
       <div
-        className="bg-slate-800 border border-green-500/40 rounded-2xl p-8 text-center w-80 shadow-2xl shadow-green-500/10"
+        className="bg-slate-800 border border-green-500/40 rounded-2xl p-8 text-center w-[min(20rem,calc(100vw-2rem))] shadow-2xl shadow-green-500/10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Checkmark */}

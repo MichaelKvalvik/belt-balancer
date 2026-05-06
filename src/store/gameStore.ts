@@ -338,6 +338,9 @@ export interface NodeBudget { splitters: number; mergers: number }
 
 export type AppMode = 'home' | 'tutorial' | 'puzzles' | 'free'
 
+/** Node types that can be "armed" from the palette for tap-to-place on touch. */
+export type ArmableNodeType = 'splitterNode' | 'mergerNode' | 'tempInputNode'
+
 interface GameState {
   nodes: Node[]
   edges: Edge[]
@@ -371,6 +374,11 @@ interface GameState {
 
   showBuildablePanel: boolean
   toggleBuildablePanel: () => void
+
+  // Tap-to-place "armed" palette item (mobile / coarse pointer support).
+  armedNodeType: ArmableNodeType | null
+  armNode: (type: ArmableNodeType | null) => void
+  placeArmedNode: (position: { x: number; y: number }) => void
 
   // Puzzle mode
   currentDifficulty:  Difficulty | null
@@ -474,13 +482,26 @@ export const useGameStore = create<GameState>((set, get) => ({
   showBuildablePanel: false,
   toggleBuildablePanel: () => set((s) => ({ showBuildablePanel: !s.showBuildablePanel })),
 
+  armedNodeType: null,
+  armNode: (type) => set((s) => ({
+    armedNodeType: type === null
+      ? null
+      : (s.armedNodeType === type ? null : type),
+  })),
+  placeArmedNode: (position) => {
+    const { armedNodeType, addNode } = get()
+    if (!armedNodeType) return
+    addNode(armedNodeType, position)
+    set({ armedNodeType: null })
+  },
+
   currentDifficulty: null,
   generatedPuzzle: null,
 
   freePlayConfig: null,
 
   setMode: (mode) => {
-    set({ mode })
+    set({ mode, armedNodeType: null })
     if (mode === 'tutorial') {
       // Tutorial mode shows the chapter list; canvas/demo are wiped until a chapter is opened
       set({
@@ -503,6 +524,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     generatedPuzzle: null,
     currentDifficulty: null,
     nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
+    armedNodeType: null,
   }),
 
   // ── Free play ────────────────────────────────────────────────────────────
@@ -538,6 +560,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       history: [],
       showWinModal: false,
       hintsRevealed: 0,
+      armedNodeType: null,
     })
   },
 
@@ -545,12 +568,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     mode: 'home',
     freePlayConfig: null,
     nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
+    armedNodeType: null,
   }),
 
   /** Return to PuzzleConfig (stay in 'free' mode, clear active config + canvas). */
   tryAnotherFreePlay: () => set({
     freePlayConfig: null,
     nodes: [], edges: [], flowResult: null, history: [], showWinModal: false,
+    armedNodeType: null,
   }),
 
   loadGeneratedPuzzle: (difficulty) => {
@@ -575,6 +600,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       history: [],
       showWinModal: false,
       hintsRevealed: 0,
+      armedNodeType: null,
     })
   },
 
@@ -787,7 +813,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!level) return
     const saved = loadCanvas(levelId)
     const { nodes, edges, flowResult } = runSolverAndStamp(saved?.nodes ?? nodesFromLevel(level), saved?.edges ?? [])
-    set({ currentLevelId: levelId, nodes, edges, flowResult, nodeBudget: level.nodeBudget, history: [], showWinModal: false, hintsRevealed: 0 })
+    set({ currentLevelId: levelId, nodes, edges, flowResult, nodeBudget: level.nodeBudget, history: [], showWinModal: false, hintsRevealed: 0, armedNodeType: null })
   },
 
   loadSolution: () => {
@@ -919,6 +945,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       demoStepIndex: 0,
       demoNodes: demoIoNodesFromPuzzle(ch.tryItPuzzle),
       demoEdges: [],
+      armedNodeType: null,
     })
   },
 
@@ -926,6 +953,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     currentChapterId: null,
     nodes: [], edges: [], flowResult: null, history: [],
     demoPlaying: false, demoPaused: false, demoStepIndex: 0, demoNodes: [], demoEdges: [],
+    armedNodeType: null,
   }),
 
   completeChapterTryIt: (id) =>

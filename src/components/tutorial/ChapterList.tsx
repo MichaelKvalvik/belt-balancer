@@ -26,7 +26,7 @@ export default function ChapterList() {
                 onClick={isUnlocked ? () => openChapter(ch.id) : undefined}
                 disabled={!isUnlocked}
                 className={[
-                  'w-full text-left rounded-lg border px-4 py-3 transition-colors flex items-start gap-3',
+                  'w-full text-left rounded-lg border px-4 py-3 min-h-[48px] transition-colors flex items-start gap-3',
                   isUnlocked
                     ? 'border-slate-700 bg-slate-900 hover:border-amber-500/60 hover:bg-slate-800/60 cursor-pointer'
                     : 'border-slate-800 bg-slate-900/40 cursor-not-allowed',
