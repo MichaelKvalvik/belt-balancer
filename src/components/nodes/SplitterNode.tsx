@@ -48,7 +48,7 @@ export default function SplitterNode({ id, data, selected }: NodeProps<SplitterN
         type="target"
         position={inPos}
         id="in"
-        className="!w-3 !h-3 !bg-slate-900 !border-2 !border-orange-400 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-slate-900 !border-2 !border-orange-400 !rounded-full"
       />
 
       {/* Label */}
@@ -82,19 +82,19 @@ export default function SplitterNode({ id, data, selected }: NodeProps<SplitterN
         type="source"
         position={out0Pos}
         id="out-0"
-        className="!w-3 !h-3 !bg-orange-400 !border-2 !border-slate-900 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-orange-400 !border-2 !border-slate-900 !rounded-full"
       />
       <Handle
         type="source"
         position={out1Pos}
         id="out-1"
-        className="!w-3 !h-3 !bg-orange-400 !border-2 !border-slate-900 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-orange-400 !border-2 !border-slate-900 !rounded-full"
       />
       <Handle
         type="source"
         position={out2Pos}
         id="out-2"
-        className="!w-3 !h-3 !bg-orange-400 !border-2 !border-slate-900 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-orange-400 !border-2 !border-slate-900 !rounded-full"
       />
     </div>
   )

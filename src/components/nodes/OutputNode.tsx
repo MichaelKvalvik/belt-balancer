@@ -37,7 +37,7 @@ export default function OutputNode({ data, selected }: NodeProps<OutputNodeData>
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-3 !h-3 !bg-slate-900 !border-2 !border-slate-500 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-slate-900 !border-2 !border-slate-500 !rounded-full"
       />
 
       <div className="text-[9px] font-mono text-slate-500 uppercase tracking-[0.2em] mb-1">

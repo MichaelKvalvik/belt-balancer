@@ -48,19 +48,19 @@ export default function MergerNode({ id, data, selected }: NodeProps<MergerNodeD
         type="target"
         position={in0Pos}
         id="in-0"
-        className="!w-3 !h-3 !bg-slate-900 !border-2 !border-sky-400 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-slate-900 !border-2 !border-sky-400 !rounded-full"
       />
       <Handle
         type="target"
         position={in1Pos}
         id="in-1"
-        className="!w-3 !h-3 !bg-slate-900 !border-2 !border-sky-400 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-slate-900 !border-2 !border-sky-400 !rounded-full"
       />
       <Handle
         type="target"
         position={in2Pos}
         id="in-2"
-        className="!w-3 !h-3 !bg-slate-900 !border-2 !border-sky-400 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-slate-900 !border-2 !border-sky-400 !rounded-full"
       />
 
       {/* Label */}
@@ -94,7 +94,7 @@ export default function MergerNode({ id, data, selected }: NodeProps<MergerNodeD
         type="source"
         position={outPos}
         id="out"
-        className="!w-3 !h-3 !bg-sky-400 !border-2 !border-slate-900 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-sky-400 !border-2 !border-slate-900 !rounded-full"
       />
     </div>
   )

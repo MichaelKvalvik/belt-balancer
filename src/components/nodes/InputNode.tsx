@@ -25,7 +25,7 @@ export default function InputNode({ data, selected }: NodeProps<InputNodeData>) 
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !bg-amber-500 !border-2 !border-slate-900 !rounded-full"
+        className="handle-hitbox !w-3 !h-3 !bg-amber-500 !border-2 !border-slate-900 !rounded-full"
       />
     </div>
   )

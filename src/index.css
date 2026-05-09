@@ -53,6 +53,16 @@
   fill: #1e293b;
 }
 
+/* Expand the clickable/draggable area of React Flow handles without
+   altering their visible size. The pseudo-element inherits pointer
+   events from the <Handle>, which is React Flow's drag surface. */
+.handle-hitbox::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+}
+
 /* Hide the native scrollbar on the buildable-factors chip row — the
    right-edge gradient hints at horizontal scrollability instead. Wheel
    and touch scrolling still work. */
