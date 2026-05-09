@@ -7,9 +7,9 @@ interface Props {
 }
 
 /**
- * Floating action bar pinned above the bottom-sheet peek strip on mobile.
+ * Action bar segment shown next to the mobile palette on phones.
  * Replaces keyboard shortcuts (rotate, undo, delete, validate) with finger-
- * friendly buttons. Renders only at `< md` (the parent gates this).
+ * friendly buttons. Positioning is owned by the parent wrapper.
  */
 export default function MobileActionBar({ showValidate }: Props) {
   const nodes        = useGameStore((s) => s.nodes)
@@ -41,7 +41,7 @@ export default function MobileActionBar({ showValidate }: Props) {
 
   return (
     <div
-      className="md:hidden fixed bottom-[60px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-2 py-1.5 rounded-md bg-slate-900/95 border border-slate-700 backdrop-blur-sm shadow-lg"
+      className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-slate-900/95 border border-slate-700 backdrop-blur-sm shadow-lg"
     >
       {canRotate && (
         <button

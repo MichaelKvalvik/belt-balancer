@@ -4,8 +4,10 @@ import BeltSelectorBar from '../BeltSelectorBar'
 import PaletteItem from '../PaletteItem'
 import MobileBottomSheet from '../MobileBottomSheet'
 import MobileActionBar from '../MobileActionBar'
+import MobilePaletteBar from '../MobilePaletteBar'
 import DemoCanvas from './DemoCanvas'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useNodeBudgetCounts } from '../../hooks/useNodeBudgetCounts'
 import { useGameStore } from '../../store/gameStore'
 import { chapters } from '../../tutorial/chapters'
 
@@ -31,8 +33,11 @@ export default function ChapterPlayer() {
   const deleteSelected   = useGameStore((s) => s.deleteSelected)
   const validate         = useGameStore((s) => s.validate)
   const loadChapterSolution = useGameStore((s) => s.loadChapterSolution)
+  const edgeSelected = useGameStore((s) => s.edges.some((e) => e.selected))
 
   const isMobile = useIsMobile()
+  const { splitterLeft, mergerLeft } = useNodeBudgetCounts()
+  const showBeltBar = !isMobile || edgeSelected
 
   const chapter = chapters.find((c) => c.id === currentChapterId)
 
@@ -125,10 +130,25 @@ export default function ChapterPlayer() {
           {/* Try-it canvas */}
           <main className="flex-1 relative overflow-hidden">
             <Canvas />
-            <div className="absolute bottom-32 md:bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto">
+            <div
+              className={[
+                'absolute md:bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto transition-all duration-150',
+                isMobile ? 'bottom-[120px]' : 'bottom-3',
+                showBeltBar
+                  ? 'opacity-100 translate-y-0 pointer-events-auto'
+                  : 'opacity-0 translate-y-2 pointer-events-none md:opacity-100 md:translate-y-0 md:pointer-events-auto',
+              ].join(' ')}
+            >
               <BeltSelectorBar />
             </div>
-            <MobileActionBar showValidate={true} />
+            <div className="md:hidden fixed bottom-[60px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 max-w-[calc(100vw-1rem)] overflow-x-auto">
+              <MobilePaletteBar
+                splitterRemaining={splitterLeft}
+                mergerRemaining={mergerLeft}
+                showTempInput={false}
+              />
+              <MobileActionBar showValidate={true} />
+            </div>
             {justCompleted && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-green-500/50 rounded-lg px-5 py-3 shadow-lg flex items-center gap-4 max-w-[calc(100vw-2rem)]">
                 <div>

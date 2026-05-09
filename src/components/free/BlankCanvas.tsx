@@ -6,6 +6,7 @@ import PaletteItem from '../PaletteItem'
 import MobileBottomSheet from '../MobileBottomSheet'
 import MobileGameTopBar from '../MobileGameTopBar'
 import MobileActionBar from '../MobileActionBar'
+import MobilePaletteBar from '../MobilePaletteBar'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useGameStore } from '../../store/gameStore'
 
@@ -265,6 +266,8 @@ export default function BlankCanvas({ onTryAnother }: BlankCanvasProps) {
   const resetGraph   = useGameStore((s) => s.resetGraph)
   const nodes        = useGameStore((s) => s.nodes)
   const edges        = useGameStore((s) => s.edges)
+  const edgeSelected = useGameStore((s) => s.edges.some((e) => e.selected))
+  const showBeltBar  = !isMobile || edgeSelected
   const isDirty = edges.length > 0 || nodes.some((n) => n.type === 'splitterNode' || n.type === 'mergerNode')
 
   function onBack() {
@@ -292,11 +295,26 @@ export default function BlankCanvas({ onTryAnother }: BlankCanvasProps) {
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 relative overflow-hidden">
           <Canvas />
-          <div className="absolute bottom-32 md:bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto">
+          <div
+            className={[
+              'absolute md:bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto transition-all duration-150',
+              isMobile ? 'bottom-[120px]' : 'bottom-3',
+              showBeltBar
+                ? 'opacity-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 translate-y-2 pointer-events-none md:opacity-100 md:translate-y-0 md:pointer-events-auto',
+            ].join(' ')}
+          >
             <BeltSelectorBar />
           </div>
           {/* Free play auto-validates, so no Validate button. */}
-          <MobileActionBar showValidate={false} />
+          <div className="md:hidden fixed bottom-[60px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 max-w-[calc(100vw-1rem)] overflow-x-auto">
+            <MobilePaletteBar
+              splitterRemaining={Infinity}
+              mergerRemaining={Infinity}
+              showTempInput={true}
+            />
+            <MobileActionBar showValidate={false} />
+          </div>
         </main>
         <FreePlaySidebar onAskNew={onTryAnother} />
       </div>

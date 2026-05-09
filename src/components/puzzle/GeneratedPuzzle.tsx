@@ -5,7 +5,9 @@ import PaletteItem from '../PaletteItem'
 import MobileBottomSheet from '../MobileBottomSheet'
 import MobileGameTopBar from '../MobileGameTopBar'
 import MobileActionBar from '../MobileActionBar'
+import MobilePaletteBar from '../MobilePaletteBar'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useNodeBudgetCounts } from '../../hooks/useNodeBudgetCounts'
 import { useGameStore } from '../../store/gameStore'
 import type { Difficulty } from '../../types'
 
@@ -20,7 +22,6 @@ function GeneratedPuzzleSidebarBody() {
   const {
     nodes,
     flowResult,
-    nodeBudget,
     currentDifficulty,
     generatedPuzzle,
     blueprints,
@@ -31,14 +32,11 @@ function GeneratedPuzzleSidebarBody() {
     stampBlueprint,
     clearGeneratedPuzzle,
   } = useGameStore()
+  const { splitterLeft, mergerLeft } = useNodeBudgetCounts()
 
   if (!generatedPuzzle || !currentDifficulty) return null
 
-  const splitterCount = nodes.filter((n) => n.type === 'splitterNode').length
-  const mergerCount   = nodes.filter((n) => n.type === 'mergerNode').length
-  const splitterLeft  = nodeBudget.splitters - splitterCount
-  const mergerLeft    = nodeBudget.mergers   - mergerCount
-  const smSelected    = nodes.some((n) => n.selected && (n.type === 'splitterNode' || n.type === 'mergerNode'))
+  const smSelected = nodes.some((n) => n.selected && (n.type === 'splitterNode' || n.type === 'mergerNode'))
 
   const { puzzle } = generatedPuzzle
   const badge = DIFFICULTY_BADGE[currentDifficulty]
@@ -266,6 +264,9 @@ export default function GeneratedPuzzleScreen() {
   const loadGeneratedPuzzle = useGameStore((s) => s.loadGeneratedPuzzle)
   const loadSolution        = useGameStore((s) => s.loadSolution)
   const clearGeneratedPuzzle = useGameStore((s) => s.clearGeneratedPuzzle)
+  const edgeSelected        = useGameStore((s) => s.edges.some((e) => e.selected))
+  const { splitterLeft, mergerLeft } = useNodeBudgetCounts()
+  const showBeltBar = !isMobile || edgeSelected
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-screen bg-slate-950 overflow-hidden">
@@ -288,10 +289,25 @@ export default function GeneratedPuzzleScreen() {
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 relative overflow-hidden">
           <Canvas />
-          <div className="absolute bottom-32 md:bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto">
+          <div
+            className={[
+              'absolute md:bottom-3 left-1/2 -translate-x-1/2 z-20 max-w-full overflow-x-auto transition-all duration-150',
+              isMobile ? 'bottom-[120px]' : 'bottom-3',
+              showBeltBar
+                ? 'opacity-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 translate-y-2 pointer-events-none md:opacity-100 md:translate-y-0 md:pointer-events-auto',
+            ].join(' ')}
+          >
             <BeltSelectorBar />
           </div>
-          <MobileActionBar showValidate={true} />
+          <div className="md:hidden fixed bottom-[60px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 max-w-[calc(100vw-1rem)] overflow-x-auto">
+            <MobilePaletteBar
+              splitterRemaining={splitterLeft}
+              mergerRemaining={mergerLeft}
+              showTempInput={true}
+            />
+            <MobileActionBar showValidate={true} />
+          </div>
         </main>
         <GeneratedPuzzleSidebar />
       </div>
