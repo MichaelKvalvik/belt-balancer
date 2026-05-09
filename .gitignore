@@ -32,3 +32,5 @@ coverage/
 
 # Vite
 .vite/
+.claude/worktrees/hopeful-bose-1b8548/
+.claude/worktrees/hopeful-murdock-eb847c/
